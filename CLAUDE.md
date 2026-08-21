@@ -90,6 +90,37 @@ These bind every table; follow them without being asked.
 - Email addresses use `citext` (the extension is enabled in the baseline
   migration) so uniqueness and lookup are case-insensitive.
 
+### Auth conventions
+
+Settled in Phase 1; every user-scoped feature after it depends on these.
+
+- **Protected routes take `CurrentUser` from `app/api/deps.py`.** It resolves the
+  bearer token *and* rejects deactivated accounts, so deactivation takes effect
+  within one access-token lifetime rather than at next login.
+- **Access tokens are 15-minute JWTs; refresh tokens are opaque, rotating, and
+  stored as SHA-256.** Presenting an already-revoked refresh token revokes its
+  whole family — reuse is treated as theft.
+- **Never widen an auth failure message.** Unknown email, wrong password, and
+  deactivated account all return the same 401 body, and unknown emails are still
+  verified against a dummy hash so timing does not enumerate accounts.
+- On the frontend the access token lives in `lib/api/session.ts` and nowhere
+  else — never `localStorage`, never a cookie. Concurrent 401s must share the
+  single in-flight refresh in `lib/api/client.ts`; firing one refresh per request
+  spends rotated tokens and gets the session family revoked.
+
+### Testing conventions
+
+- Database tests live in `tests/integration/` and use the fixtures in its
+  `conftest.py`: migrate once per session, then wrap each test in a transaction
+  that is rolled back. The session joins it with a savepoint, so service-level
+  `commit()` calls still land somewhere disposable.
+- **The integration client speaks `https://testserver`.** The refresh cookie is
+  `Secure` outside `local`, and a cookie jar will not return a `Secure` cookie
+  over plain HTTP — so an `http://` client silently loses every refresh test.
+- **Every phase that adds a user-scoped resource appends it to
+  `CROSS_USER_RESOURCES`** in `tests/integration/test_cross_user_authorization.py`.
+  Prefer `404` over `403` for another user's row: `403` confirms it exists.
+
 ### Dependency policy
 
 Some popular packages are deliberately banned here:

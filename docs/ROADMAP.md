@@ -12,7 +12,7 @@ spec because agents trust it.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Scaffold, tooling, Docker, Alembic, CI | ✅ complete |
-| 1 | Auth & users | 🚧 in progress — [spec](phases/phase-1-auth.md) |
+| 1 | Auth & users | ✅ complete — [spec](phases/phase-1-auth.md) |
 | 2 | Market data foundation + watchlists | ⬜ |
 | 3 | Analysis & charting | ⬜ |
 | 4 | Screeners | ⬜ |
@@ -35,7 +35,7 @@ component was also pinned to Python 3.14.7, which retires the `uuid-utils`
 dependency Phase 1 was going to add: `uuid.uuid7()` is in the standard library
 there.
 
-## Phase 1 — Auth & users
+## Phase 1 — Auth & users ✅
 
 **Spec: [`docs/phases/phase-1-auth.md`](phases/phase-1-auth.md)**
 
@@ -43,6 +43,12 @@ there.
 rotating refresh tokens and reuse detection · login rate limiting · frontend auth
 store, login/register pages, protected routes, 401-refresh-retry interceptor ·
 cross-user authorization test harness.
+
+Two things worth carrying forward. The concurrent-401 case needed an explicit
+test: because refresh tokens rotate and reuse is treated as theft, a client that
+fires one refresh per failed request revokes its own session — and a naive
+implementation passes every other assertion. And `email-validator` joined the
+dependency list, which the spec's table had missed.
 
 ## Phase 2 — Market data + watchlists
 
