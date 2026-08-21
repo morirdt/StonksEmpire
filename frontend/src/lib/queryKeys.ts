@@ -9,4 +9,8 @@ export const queryKeys = {
     meta: () => ['system', 'meta'] as const,
     health: () => ['system', 'health'] as const,
   },
+  auth: {
+    all: () => ['auth'] as const,
+    currentUser: () => ['auth', 'me'] as const,
+  },
 } as const;
