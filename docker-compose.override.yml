@@ -1,0 +1,17 @@
+# Applied automatically by `docker compose up` for local development.
+# Bind-mounts source into the containers so both servers hot-reload.
+services:
+  api:
+    volumes:
+      - ./backend:/app
+      # Anonymous volume keeps the image's virtualenv from being shadowed by
+      # the bind mount (a host .venv would be the wrong platform anyway).
+      - /app/.venv
+    command:
+      ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  web:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: ["pnpm", "dev", "--host", "0.0.0.0"]

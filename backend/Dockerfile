@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1
+
+# ---------------------------------------------------------------- builder ---
+# Built on the same image as the production stage so the virtualenv is created
+# against the exact interpreter that will run it. uv's own python3.14 image is
+# tagged by minor version only (it currently ships 3.14.2), which cannot satisfy
+# the 3.14.7 pin in .python-version, so the uv binary is copied in instead.
+FROM python:3.14.7-slim-bookworm AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /usr/local/bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app
+
+# Dependencies are installed in their own layer so that application code
+# changes do not invalidate the (slow) dependency install.
+COPY pyproject.toml uv.lock .python-version ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-dev
+
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
+
+# ------------------------------------------------------------------- dev ----
+FROM builder AS dev
+
+ENV UV_COMPILE_BYTECODE=0
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked
+ENV PATH="/app/.venv/bin:$PATH"
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# ------------------------------------------------------------- production ---
+FROM python:3.14.7-slim-bookworm AS production
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN groupadd --system --gid 1001 app \
+    && useradd --system --uid 1001 --gid app --create-home app
+
+WORKDIR /app
+COPY --from=builder --chown=app:app /app /app
+
+USER app
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
