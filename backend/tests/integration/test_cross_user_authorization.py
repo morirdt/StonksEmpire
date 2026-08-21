@@ -8,6 +8,14 @@ retrofitted selectively and misses things.
 The rule it enforces: a request authenticated as user A must never read or
 mutate anything belonging to user B. Prefer 404 over 403 for another user's
 row — 403 confirms the row exists, which is itself a leak.
+
+There are two registries, because user-scoped resources come in two shapes.
+``CROSS_USER_RESOURCES`` covers the ones addressed by an id in the path, where
+the test is "name someone else's row, expect to be denied".
+``CALLER_SCOPED_RESOURCES`` covers the ones whose identity *is* the caller
+(``/me/...``), where 200 is the correct answer and the real failure is one
+user's write landing on another's row. Add a new resource to whichever fits;
+adding a caller-scoped one to the first list would assert something false.
 """
 
 from __future__ import annotations
@@ -67,6 +75,50 @@ CROSS_USER_RESOURCES: list[ResourceCase] = [
         body={"item_ids": ["00000000-0000-7000-8000-000000000000"]},
     ),
     ResourceCase("DELETE", "/api/v1/watchlists/{watchlist_id}/items/{item_id}"),
+]
+
+
+@dataclass(frozen=True)
+class CallerScopedCase:
+    """A resource whose identity *is* the caller, so there is no id to forge.
+
+    ``CROSS_USER_RESOURCES`` cannot express these. Its whole shape is "name
+    another user's row and expect to be denied", and a caller-scoped endpoint
+    correctly answers 200 — with the caller's own row. Asserting a denial there
+    would assert something false.
+
+    The failure these can actually have is different, and worth its own harness:
+    one user's write landing on another user's row, which a shared key, a
+    mis-scoped upsert, or a cached row would all produce. So each case names a
+    read, a write, and two distinguishable payloads, and the test proves the two
+    users' rows stay independent.
+    """
+
+    method: str
+    path: str
+    mine: dict[str, Any]
+    theirs: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: chart preferences. Later caller-scoped resources (profile settings,
+# notification preferences) belong here rather than in the list above.
+# ---------------------------------------------------------------------------
+CALLER_SCOPED_RESOURCES: list[CallerScopedCase] = [
+    CallerScopedCase(
+        "PUT",
+        "/api/v1/me/chart-preferences",
+        mine={
+            "default_range": "1M",
+            "active_overlays": ["sma_20"],
+            "active_oscillators": [],
+        },
+        theirs={
+            "default_range": "2Y",
+            "active_overlays": ["ema_12", "ema_26"],
+            "active_oscillators": ["macd"],
+        },
+    ),
 ]
 
 
@@ -133,6 +185,37 @@ async def test_one_user_cannot_touch_another_users_resource(
         f"{case.method} {case.path} leaked another user's row "
         f"with {response.status_code}: {response.text}"
     )
+
+
+@pytest.mark.parametrize("case", CALLER_SCOPED_RESOURCES, ids=lambda c: f"{c.method} {c.path}")
+async def test_a_caller_scoped_write_cannot_reach_another_users_row(
+    client: AsyncClient,
+    auth_client: AsyncClient,
+    case: CallerScopedCase,
+) -> None:
+    """Two users, two writes, two rows that must not have merged.
+
+    The order matters: the other user writes *first*, so that a bug where the
+    second write overwrites a shared row is caught by their read, not hidden by
+    it. Reading both back afterwards catches the mirror-image bug where a stale
+    identity-mapped row serves the wrong user their neighbour's settings.
+    """
+    other = await _register_another_user(client)
+    other_headers = {"Authorization": f"Bearer {other['access_token']}"}
+
+    theirs = await client.request(case.method, case.path, json=case.theirs, headers=other_headers)
+    assert theirs.status_code == 200, theirs.text
+
+    mine = await auth_client.request(case.method, case.path, json=case.mine)
+    assert mine.status_code == 200, mine.text
+
+    still_theirs = await client.get(case.path, headers=other_headers)
+    assert still_theirs.json() == theirs.json(), (
+        f"{case.method} {case.path} let one user's write land on another's row"
+    )
+
+    still_mine = await auth_client.get(case.path)
+    assert still_mine.json() == mine.json()
 
 
 async def test_another_users_watchlist_is_404_not_403(

@@ -8,6 +8,7 @@ its table.
 
 from __future__ import annotations
 
+from app.models.chart_preferences import UserChartPreferences
 from app.models.market_data import DailyBar, DailyIndicator, LatestQuote
 from app.models.refresh_token import RefreshToken
 from app.models.symbol import Symbol
@@ -21,6 +22,7 @@ __all__: list[str] = [
     "RefreshToken",
     "Symbol",
     "User",
+    "UserChartPreferences",
     "Watchlist",
     "WatchlistItem",
 ]
