@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -49,21 +49,15 @@ function NoWatchlists({ onCreate, creating }: { onCreate: () => void; creating: 
 export function WatchlistsPage() {
   const watchlists = useWatchlists();
   const createWatchlist = useCreateWatchlist();
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const available = watchlists.data ?? [];
 
-  // Follow the server's ordering rather than pinning an id that may have been
-  // deleted in another tab.
-  const available = useMemo(() => watchlists.data ?? [], [watchlists.data]);
-  useEffect(() => {
-    const first = available[0];
-    if (!first) {
-      setSelectedId(undefined);
-      return;
-    }
-    if (!selectedId || !available.some((w) => w.id === selectedId)) {
-      setSelectedId(first.id);
-    }
-  }, [available, selectedId]);
+  // Only the user's explicit choice is state. Which list is actually shown is
+  // derived during render, so there is no effect keeping two sources of truth
+  // in step — and a list deleted in another tab falls back to the first one on
+  // its own rather than after a cascading re-render.
+  const [chosenId, setChosenId] = useState<string | undefined>();
+  const selectedId =
+    chosenId && available.some((w) => w.id === chosenId) ? chosenId : available[0]?.id;
 
   const grid = useWatchlistGrid(selectedId);
   const addItem = useAddWatchlistItem(selectedId ?? '');
@@ -130,7 +124,7 @@ export function WatchlistsPage() {
           <WatchlistPicker
             watchlists={available}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={setChosenId}
             onCreate={(name) => createWatchlist.mutateAsync(name)}
             creating={createWatchlist.isPending}
             createError={errorMessage(createWatchlist.error)}
