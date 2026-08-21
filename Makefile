@@ -79,6 +79,19 @@ downgrade: ## Roll back one migration
 migration-check: ## Fail if models have drifted from migrations
 	cd $(BACKEND) && uv run alembic check
 
+# --------------------------------------------------------------- ingest -----
+# Neither target runs automatically. Scheduling arrives with the Phase 5 worker;
+# an unattended backfill triggered by `make up` would spend a free-tier provider
+# quota before anyone noticed.
+.PHONY: seed
+seed: ## Seed the symbol universe from the configured provider
+	cd $(BACKEND) && uv run python -m scripts.seed_universe
+
+.PHONY: backfill
+backfill: ## Backfill bars + indicators: make backfill days=730 tickers=AAPL,MSFT
+	cd $(BACKEND) && uv run python -m scripts.backfill_bars \
+		$(if $(days),--days $(days),) $(if $(tickers),--tickers $(tickers),)
+
 # ------------------------------------------------------------------- run ----
 .PHONY: dev-api
 dev-api: ## Run the API on the host (needs `make up-db`)

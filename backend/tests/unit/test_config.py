@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
-from app.core.config import DatabaseSettings, Settings
+from app.core.config import DatabaseSettings, MarketDataSettings, Settings
 
 
 def _settings(**overrides: object) -> Settings:
@@ -81,3 +81,38 @@ def test_json_logging_defaults_to_production_only() -> None:
         is True
     )
     assert _settings(environment="local", log_json=True).use_json_logs is True
+
+
+def test_market_data_defaults_to_the_fake_provider() -> None:
+    """A fresh clone must come up working without anyone holding an API key."""
+    assert _settings().market_data.provider == "fake"
+
+
+def test_fake_provider_needs_no_credentials() -> None:
+    MarketDataSettings(provider="fake")
+
+
+@pytest.mark.parametrize("provider", ["finnhub", "tiingo"])
+def test_selecting_a_real_provider_without_its_key_fails_at_startup(provider: str) -> None:
+    """Fail on boot, not on the first request that happens to need the key."""
+    with pytest.raises(PydanticValidationError, match="API_KEY"):
+        MarketDataSettings(provider=provider)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("provider", "field"),
+    [("finnhub", "finnhub_api_key"), ("tiingo", "tiingo_api_key")],
+)
+def test_a_real_provider_with_its_key_validates(provider: str, field: str) -> None:
+    settings = MarketDataSettings(**{"provider": provider, field: "secret"})  # type: ignore[arg-type]
+
+    assert settings.provider == provider
+
+
+def test_the_other_providers_key_does_not_satisfy_the_check() -> None:
+    with pytest.raises(PydanticValidationError, match="TIINGO_API_KEY"):
+        MarketDataSettings(provider="tiingo", finnhub_api_key="secret")  # type: ignore[arg-type]
+
+
+def test_quote_ttl_is_exposed_as_a_timedelta() -> None:
+    assert MarketDataSettings(quote_ttl_seconds=90).quote_ttl.total_seconds() == 90

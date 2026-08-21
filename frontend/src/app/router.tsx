@@ -5,6 +5,7 @@ import { AuthGuard } from '@/features/auth/components/AuthGuard';
 import { LoginPage } from '@/features/auth/routes/LoginPage';
 import { RegisterPage } from '@/features/auth/routes/RegisterPage';
 import { DashboardPage } from '@/features/system/routes/DashboardPage';
+import { WatchlistsPage } from '@/features/watchlists/routes/WatchlistsPage';
 
 /**
  * Routes are declared centrally. Feature pages are imported here and nowhere
@@ -22,7 +23,10 @@ export const router = createBrowserRouter([
       { path: 'register', element: <RegisterPage /> },
       {
         element: <AuthGuard />,
-        children: [{ index: true, element: <DashboardPage /> }],
+        children: [
+          { index: true, element: <DashboardPage /> },
+          { path: 'watchlists', element: <WatchlistsPage /> },
+        ],
       },
       { path: '*', element: <NotFoundPage /> },
     ],

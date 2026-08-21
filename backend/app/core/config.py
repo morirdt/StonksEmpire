@@ -77,6 +77,57 @@ class AuthSettings(BaseModel):
         return timedelta(days=self.refresh_token_ttl_days)
 
 
+class MarketDataSettings(BaseModel):
+    """Market data provider selection, credentials, and resilience tuning.
+
+    ``fake`` is the default on purpose: a fresh clone must come up working, and
+    every test must pass, without anyone holding an API key. Selecting a real
+    provider without its credential is a startup failure rather than a runtime
+    surprise on the first request.
+    """
+
+    provider: Literal["fake", "finnhub", "tiingo"] = "fake"
+
+    finnhub_api_key: SecretStr | None = None
+    tiingo_api_key: SecretStr | None = None
+
+    # Outbound call budget, per provider. This is a placeholder: every real
+    # provider's free tier differs, and the number must be confirmed against
+    # that provider's own documentation when it is implemented rather than
+    # carried over from here. It lives in settings precisely so that confirming
+    # it is a config change and not a code change.
+    requests_per_minute: int = 60
+
+    # How stale a cached quote may be before it is refetched.
+    quote_ttl_seconds: int = 60
+    request_timeout_seconds: float = 10.0
+    max_retries: int = 3
+
+    # Consecutive failures before the breaker opens, and how long it stays open.
+    breaker_failure_threshold: int = 5
+    breaker_reset_seconds: float = 60.0
+
+    # Ceiling on the seeded universe, whatever the provider offers.
+    universe_max_symbols: int = 1000
+
+    @property
+    def quote_ttl(self) -> timedelta:
+        return timedelta(seconds=self.quote_ttl_seconds)
+
+    @model_validator(mode="after")
+    def _require_key_for_real_provider(self) -> Self:
+        required = {
+            "finnhub": self.finnhub_api_key,
+            "tiingo": self.tiingo_api_key,
+        }.get(self.provider)
+        if self.provider != "fake" and required is None:
+            raise ValueError(
+                f"MARKET_DATA__PROVIDER={self.provider} requires "
+                f"MARKET_DATA__{self.provider.upper()}_API_KEY to be set"
+            )
+        return self
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Anchored to the repo, not the process CWD: the API runs from
@@ -112,6 +163,7 @@ class Settings(BaseSettings):
     # --- nested groups ---
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
 
     @property
     def is_prod(self) -> bool:

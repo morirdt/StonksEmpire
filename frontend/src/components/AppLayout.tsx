@@ -10,7 +10,7 @@ import Typography from '@mui/material/Typography';
 import { useColorScheme } from '@mui/material/styles';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
-import { Outlet } from 'react-router';
+import { NavLink, Outlet } from 'react-router';
 import { useAuthBootstrap } from '@/features/auth/api/useAuthBootstrap';
 import { useLogout } from '@/features/auth/api/useAuth';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -28,6 +28,35 @@ function ColorSchemeToggle() {
         {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
       </IconButton>
     </Tooltip>
+  );
+}
+
+/** Only rendered when signed in — these routes are behind the auth guard. */
+function MainNav() {
+  const status = useAuthStore((state) => state.status);
+  if (status !== 'authenticated') return null;
+
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      {[
+        { to: '/', label: 'Dashboard', end: true },
+        { to: '/watchlists', label: 'Watchlists', end: false },
+      ].map((link) => (
+        <Button
+          key={link.to}
+          component={NavLink}
+          to={link.to}
+          end={link.end}
+          size="small"
+          sx={{
+            color: 'text.secondary',
+            '&.active': { color: 'primary.main', bgcolor: 'action.selected' },
+          }}
+        >
+          {link.label}
+        </Button>
+      ))}
+    </Stack>
   );
 }
 
@@ -58,9 +87,12 @@ export function AppLayout() {
     <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default' }}>
       <AppBar position="sticky" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <Typography variant="h3" component="span" sx={{ flexGrow: 1 }}>
+          <Typography variant="h3" component="span" sx={{ mr: 3 }}>
             Stonks Empire
           </Typography>
+          <Box sx={{ flexGrow: 1 }}>
+            <MainNav />
+          </Box>
           <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
             <AccountControls />
             <ColorSchemeToggle />

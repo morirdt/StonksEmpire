@@ -32,6 +32,7 @@ from app.api.v1.routes import auth as auth_routes
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.main import create_app
+from app.models.symbol import Symbol
 
 BACKEND_DIR = pathlib.Path(__file__).resolve().parents[2]
 
@@ -152,3 +153,31 @@ async def auth_client(
     """A client already carrying a bearer token for ``registered_user``."""
     client.headers["Authorization"] = f"Bearer {registered_user['access_token']}"
     return client
+
+
+#: Enough of a universe for watchlists to point at. Deliberately tiny — these
+#: tests are about scoping and CRUD, not about the size of the seed.
+SEED_TICKERS = (
+    ("AAPL", "Apple Inc.", "NASDAQ", "common_stock"),
+    ("MSFT", "Microsoft Corporation", "NASDAQ", "common_stock"),
+    ("SPY", "SPDR S&P 500 ETF Trust", "NYSEARCA", "etf"),
+)
+
+
+@pytest.fixture
+async def seeded_symbols(db_session: AsyncSession) -> list[Symbol]:
+    """A handful of symbols, inside the test's rolled-back transaction."""
+    symbols = [
+        Symbol(
+            ticker=ticker,
+            name=name,
+            exchange=exchange,
+            asset_type=asset_type,
+            currency="USD",
+            is_active=True,
+        )
+        for ticker, name, exchange, asset_type in SEED_TICKERS
+    ]
+    db_session.add_all(symbols)
+    await db_session.commit()
+    return symbols

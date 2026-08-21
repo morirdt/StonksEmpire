@@ -13,8 +13,8 @@ spec because agents trust it.
 |-------|-------|--------|
 | 0 | Scaffold, tooling, Docker, Alembic, CI | ✅ complete |
 | 1 | Auth & users | ✅ complete — [spec](phases/phase-1-auth.md) |
-| 2 | Market data foundation + watchlists | ⬜ |
-| 3 | Analysis & charting | ⬜ |
+| 2 | Market data foundation + watchlists | ✅ complete — [spec](phases/phase-2-market-data.md) |
+| 3 | Analysis & charting | ⬜ next |
 | 4 | Screeners | ⬜ |
 | 5 | Alerts, background jobs, real-time | ⬜ |
 | 6 | Trading log & performance insights | ⬜ |
@@ -50,12 +50,39 @@ fires one refresh per failed request revokes its own session — and a naive
 implementation passes every other assertion. And `email-validator` joined the
 dependency list, which the spec's table had missed.
 
-## Phase 2 — Market data + watchlists
+## Phase 2 — Market data + watchlists ✅
+
+**Spec: [`docs/phases/phase-2-market-data.md`](phases/phase-2-market-data.md)**
 
 `symbols`, `daily_bars`, `daily_indicators`, `latest_quotes` · `MarketDataProvider`
 protocol with Finnhub, Tiingo, and Fake implementations · rate limiting, retry,
 circuit breaker · universe seed and EOD backfill scripts · server-side indicator
 computation · watchlist CRUD and quote grid.
+
+> Three loosely coupled pieces — provider layer, data layer, feature — and only
+> the last is user-visible. The `Fake` provider is what lets the other two be
+> built and tested without a network or an API key, so it is not a testing
+> afterthought: it is the default.
+
+Built with **no provider account**, which turned out to matter less than
+expected: `Fake` is the only implementation, and Finnhub and Tiingo remain
+specified behind the protocol. Nothing downstream knows the difference. The one
+consequence is that the ~530-name universe ships as a CSV in the repo, because
+`list_symbols()` had no upstream to ask.
+
+Three things worth carrying forward:
+
+- **`latest_quotes` is written by a Core upsert, which the ORM identity map
+  knows nothing about.** With `expire_on_commit=False`, the grid joined in a
+  stale quote, refreshed it, and then rendered the pre-refresh price — polling
+  looked exactly like a provider that had stopped updating. Both quote reads
+  use `populate_existing` now.
+- **Indicators recompute over the whole stored series, not the fetched window.**
+  Otherwise a 200-day average that only sees new bars is not one, and the
+  leading rows of an appended window stay null forever.
+- **A provider outage degrades rather than fails.** `/ready` reports it as a
+  named check without going red, and stale quotes are served with an honest
+  timestamp instead of a blank grid.
 
 ## Phase 3 — Analysis & charting
 

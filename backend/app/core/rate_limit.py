@@ -52,6 +52,26 @@ class TokenBucketLimiter:
             bucket.tokens -= 1
             return True
 
+    def time_until_token(self, key: str, *, now: float | None = None) -> float:
+        """Seconds until ``key`` would be allowed again. ``0.0`` if it is now.
+
+        Callers that must *wait* for capacity — the market data providers, which
+        meter a quota rather than blunt an attack — use this to sleep exactly
+        long enough instead of polling ``allow`` in a loop.
+        """
+        moment = now if now is not None else time.monotonic()
+        refill_rate = self.capacity / self.window_seconds
+
+        with self._lock:
+            bucket = self._buckets.get(key)
+            if bucket is None:
+                return 0.0
+            elapsed = max(0.0, moment - bucket.updated_at)
+            tokens = min(self.capacity, bucket.tokens + elapsed * refill_rate)
+            if tokens >= 1:
+                return 0.0
+            return (1 - tokens) / refill_rate
+
     def reset(self) -> None:
         """Drop all state. For tests, so one case cannot starve the next."""
         with self._lock:
