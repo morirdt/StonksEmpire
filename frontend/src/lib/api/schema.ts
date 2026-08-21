@@ -106,6 +106,171 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get quotes by ticker
+         * @description Cache-first. Anything past the TTL is refetched, the rest is served as stored.
+         *
+         *     Unknown tickers are simply absent from the response rather than failing it.
+         */
+        get: operations["market-data_get_quotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/symbols": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search symbols
+         * @description Trigram search over ticker and name. Exact ticker matches rank first.
+         */
+        get: operations["market-data_search_symbols"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/symbols/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one symbol */
+        get: operations["market-data_get_symbol"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/watchlists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List your watchlists */
+        get: operations["watchlists_list_watchlists"];
+        put?: never;
+        /**
+         * Create a watchlist
+         * @description 409 when the name is already taken — names are unique per user.
+         */
+        post: operations["watchlists_create_watchlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/watchlists/{watchlist_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a watchlist */
+        get: operations["watchlists_get_watchlist"];
+        put?: never;
+        post?: never;
+        /** Delete a watchlist */
+        delete: operations["watchlists_delete_watchlist"];
+        options?: never;
+        head?: never;
+        /** Rename a watchlist */
+        patch: operations["watchlists_update_watchlist"];
+        trace?: never;
+    };
+    "/api/v1/watchlists/{watchlist_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a symbol to a watchlist
+         * @description 409 if the symbol is already on the list; 404 if the ticker is unknown.
+         */
+        post: operations["watchlists_add_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reorder a watchlist
+         * @description Takes the complete ordering; a partial list is a 422.
+         */
+        patch: operations["watchlists_reorder_items"];
+        trace?: never;
+    };
+    "/api/v1/watchlists/{watchlist_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a symbol from a watchlist */
+        delete: operations["watchlists_remove_item"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/watchlists/{watchlist_id}/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The quote grid for a watchlist
+         * @description The endpoint the grid polls: one request, one joined read.
+         *
+         *     Stale quotes are refreshed first so that polling this actually moves the
+         *     prices, then the rows come back from a single join rather than a query per
+         *     item. Refreshing is cache-first and bounded by the quote TTL, so polling
+         *     faster than the TTL costs nothing upstream.
+         */
+        get: operations["watchlists_watchlist_quotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -135,7 +300,12 @@ export interface paths {
         };
         /**
          * Readiness probe
-         * @description Can the process serve traffic? Checks every hard dependency.
+         * @description Can the process serve traffic?
+         *
+         *     Note that a ``false`` in ``checks`` does not necessarily mean ``not_ready``:
+         *     only the checks in ``_REQUIRED_CHECKS`` decide the status. The rest are
+         *     surfaced so an operator can see a degraded dependency without a pager going
+         *     off for it.
          */
         get: operations["health_ready"];
         put?: never;
@@ -185,12 +355,71 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * QuoteResponse
+         * @description A price, with both timestamps.
+         *
+         *     ``quoted_at`` is the provider's view of when this price was true;
+         *     ``fetched_at`` is when we last asked. The client needs both to render "as
+         *     of" honestly — a stale weekend price is not the same thing as a broken
+         *     ingest, and a UI that only has one timestamp cannot tell the difference.
+         *
+         *     Every price is a string over the wire, because ``Decimal`` serialised as a
+         *     JSON number would be parsed back into a float by every JavaScript client
+         *     and quietly lose precision.
+         */
+        QuoteResponse: {
+            /** Change */
+            change?: string | null;
+            /** Change Percent */
+            change_percent?: string | null;
+            /** Day High */
+            day_high?: string | null;
+            /** Day Low */
+            day_low?: string | null;
+            /** Day Open */
+            day_open?: string | null;
+            /**
+             * Fetched At
+             * Format: date-time
+             */
+            fetched_at: string;
+            /** Previous Close */
+            previous_close?: string | null;
+            /** Price */
+            price: string;
+            /** Quoted At */
+            quoted_at?: string | null;
+            /** Ticker */
+            ticker: string;
+            /** Volume */
+            volume?: number | null;
+        };
+        /**
+         * QuotesResponse
+         * @description Keyed by ticker.
+         *
+         *     A ticker that was asked for but is absent from the map was either unknown
+         *     or has never been priced; the client renders those as blanks rather than
+         *     treating the whole request as failed.
+         */
+        QuotesResponse: {
+            /** Quotes */
+            quotes?: {
+                [key: string]: components["schemas"]["QuoteResponse"];
+            };
+        };
         /** ReadinessResponse */
         ReadinessResponse: {
             /** Checks */
             checks: {
                 [key: string]: boolean;
             };
+            /**
+             * Degraded
+             * @default []
+             */
+            degraded: string[];
             /** Status */
             status: string;
         };
@@ -205,6 +434,34 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * SymbolResponse
+         * @description One instrument in the universe.
+         */
+        SymbolResponse: {
+            /** Asset Type */
+            asset_type: string;
+            /** Currency */
+            currency: string;
+            /** Exchange */
+            exchange: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** SymbolSearchResponse */
+        SymbolSearchResponse: {
+            /** Items */
+            items: components["schemas"]["SymbolResponse"][];
         };
         /**
          * TokenResponse
@@ -261,6 +518,112 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WatchlistCreateRequest */
+        WatchlistCreateRequest: {
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** Name */
+            name: string;
+        };
+        /** WatchlistDetailResponse */
+        WatchlistDetailResponse: {
+            /** Rows */
+            rows: components["schemas"]["WatchlistRowResponse"][];
+            watchlist: components["schemas"]["WatchlistResponse"];
+        };
+        /** WatchlistItemCreateRequest */
+        WatchlistItemCreateRequest: {
+            /** Notes */
+            notes?: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** WatchlistItemResponse */
+        WatchlistItemResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Notes */
+            notes: string | null;
+            /** Position */
+            position: number;
+            /**
+             * Symbol Id
+             * Format: uuid
+             */
+            symbol_id: string;
+        };
+        /**
+         * WatchlistReorderRequest
+         * @description The full ordering, not a moved pair.
+         *
+         *     A partial reorder has no well-defined answer for the items it leaves out,
+         *     and the drag-and-drop UI already knows the complete order it wants.
+         */
+        WatchlistReorderRequest: {
+            /** Item Ids */
+            item_ids: string[];
+        };
+        /** WatchlistResponse */
+        WatchlistResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Default */
+            is_default: boolean;
+            /**
+             * Item Count
+             * @default 0
+             */
+            item_count: number;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * WatchlistRowResponse
+         * @description One line of the quote grid: the item, its symbol, and its latest price.
+         *
+         *     Flattened into a single object per row on purpose — the grid renders rows,
+         *     and making the client stitch three collections together is how N+1 gets
+         *     reinvented on the frontend.
+         */
+        WatchlistRowResponse: {
+            item: components["schemas"]["WatchlistItemResponse"];
+            quote?: components["schemas"]["QuoteResponse"] | null;
+            symbol: components["schemas"]["SymbolResponse"];
+        };
+        /**
+         * WatchlistUpdateRequest
+         * @description Every field optional — this is a PATCH, so absent means "leave alone".
+         */
+        WatchlistUpdateRequest: {
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Name */
+            name?: string | null;
         };
     };
     responses: never;
@@ -411,6 +774,380 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MetaResponse"];
+                };
+            };
+        };
+    };
+    "market-data_get_quotes": {
+        parameters: {
+            query: {
+                /** @description Comma-separated tickers, e.g. AAPL,MSFT */
+                tickers: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "market-data_search_symbols": {
+        parameters: {
+            query: {
+                search: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SymbolSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "market-data_get_symbol": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SymbolResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_list_watchlists: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistResponse"][];
+                };
+            };
+        };
+    };
+    watchlists_create_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_get_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_delete_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_update_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_add_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistItemCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistItemResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_reorder_items: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistItemResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_remove_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlists_watchlist_quotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlist_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

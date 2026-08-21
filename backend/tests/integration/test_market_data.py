@@ -365,3 +365,33 @@ async def _snapshot(session: AsyncSession, symbol: Symbol) -> tuple:
         .order_by(DailyIndicator.trade_date)
     )
     return bars, [tuple(row) for row in result.all()]
+
+
+@pytest.mark.parametrize("query", ["apple", "aapl", "AAPL"])
+async def test_the_things_a_user_actually_types_find_apple(
+    db_session: AsyncSession,
+    auth_client: AsyncClient,
+    seeded_symbols: list[Symbol],
+    query: str,
+) -> None:
+    """Ranking is tested against realistic input, with a near-miss in the table.
+
+    A bare "appl" is deliberately not asserted on: it is a genuine prefix of
+    AppLovin, which scores higher on ticker similarity than Apple does, and
+    calling that result wrong would be pretending the query is less ambiguous
+    than it is.
+    """
+    db_session.add(
+        Symbol(
+            ticker="APP",
+            name="AppLovin Corporation",
+            exchange="NASDAQ",
+            asset_type="common_stock",
+            currency="USD",
+        )
+    )
+    await db_session.commit()
+
+    response = await auth_client.get("/api/v1/symbols", params={"search": query})
+
+    assert response.json()["items"][0]["ticker"] == "AAPL"
