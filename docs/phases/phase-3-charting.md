@@ -164,17 +164,44 @@ Colour is assigned **per indicator identity, fixed** — `sma_50` is amber wheth
 it is the only overlay or the third one enabled. Colour must never follow the
 order things were switched on, or turning one line off repaints the others.
 
+> **Which forces the overlay set to be exactly the three SMAs.** Fixed
+> per-identity colour and three palette slots together mean the number of
+> overlay *identities* cannot exceed three, or some pair shares a colour
+> permanently — and assigning slots by position instead is the repainting this
+> paragraph rules out. `PriceOverlay` is therefore `sma_20` / `sma_50` /
+> `sma_200`, and the stored EMAs are not offered on the price pane: they exist
+> to feed MACD, which has a pane of its own. A fourth overlay needs a fourth
+> validated colour first.
+
 | Slot | Dark | Light |
 |---|---|---|
-| 1 — blue (`brand[300]` / `brand[500]`) | `#5f9dff` | `#1565d8` |
-| 2 — amber | `#eda100` | `#a86f00` |
+| 1 — blue (`brand[400]` / `brand[500]`) | `#3480fb` | `#1565d8` |
+| 2 — amber | `#bf8200` | `#a86f00` |
 | 3 — magenta | `#d55181` | `#c2185b` |
 
-Validated all-pairs in both modes: worst CVD ΔE 18.8 dark / 10.0 light, worst
-normal-vision ΔE 24.6 / 20.1, all ≥ 3:1 against their surface. These are
+Validated all-pairs in both modes: worst CVD ΔE 12.3 dark / 10.0 light, worst
+normal-vision ΔE 19.2 / 20.1, all ≥ 3:1 against their surface. These are
 validated **among themselves**, which is the right comparison — they are 2px
 continuous lines against discrete candle bodies, and mark shape already
 separates them from the candles.
+
+> **Two dark values were corrected during implementation.** The table
+> originally read `#5f9dff` (slot 1) and `#eda100` (slot 2). Re-running the
+> validator before writing any chart code showed both sitting **above the dark
+> lightness band** (OKLCH L 0.699 and 0.764 against a ceiling of 0.67), which
+> is a FAIL the original figures did not mention — they reported only the CVD
+> and contrast checks. Snapping each to the nearest passing step gives the
+> values above: one step down the same brand ramp for the blue, a darker amber
+> for slot 2. The magenta was already inside the band and is unchanged. Both
+> modes now report ALL CHECKS PASS with no warnings, all-pairs. Re-run before
+> changing anything here:
+>
+> ```
+> node scripts/validate_palette.js "#3480fb,#bf8200,#d55181" \
+>   --mode dark --surface "#141922" --pairs all
+> node scripts/validate_palette.js "#1565d8,#a86f00,#c2185b" \
+>   --mode light --surface "#ffffff" --pairs all
+> ```
 
 ### Oscillator panes
 
@@ -194,9 +221,13 @@ separates them from the candles.
   candles cannot be read to a precise value without one.
 - **A legend whenever two or more series share a pane**, so identity is never
   carried by colour alone.
-- **A table view.** The chart is canvas, which means it is invisible to a screen
-  reader and unselectable. A toggleable table of the same rows is the
-  accessible equivalent, and it is also the fastest way to check a value.
+- ~~**A table view.**~~ **Cut during implementation, at the user's request.**
+  The reasoning for it still stands and is worth recording: the chart is canvas,
+  so it is invisible to a screen reader and unselectable, and a table of the
+  same rows was the accessible equivalent. What remains is the crosshair
+  readout, which is real text and reports the selected bar — one row at a time
+  rather than the whole series. Phase 7's accessibility pass should revisit
+  this.
 - **Light and dark are selected, not flipped.** Each mode has its own validated
   steps, above. Read them from the MUI theme at render time and rebuild the
   series options when the scheme changes.
@@ -247,8 +278,9 @@ separates them from the candles.
   leaves user B's row untouched, which is the failure this resource can actually
   have.
 - Frontend: the range selector, the indicator toggles, the three-overlay cap,
-  the table view, and the empty/loading/error states. **Not** the rendered
-  pixels — say so in the test file, so the gap is visible rather than assumed.
+  the crosshair readout, and the empty/loading/error states. **Not** the
+  rendered pixels — say so in the test file, so the gap is visible rather than
+  assumed.
 
 ## Out of scope
 
@@ -274,7 +306,7 @@ that recomputes indicators, which is Phase 2's job and already done.
 - [ ] In a browser: open a symbol from a watchlist, change the range, toggle
       indicators, read a value off the crosshair, reload and find the choices
       remembered.
-- [ ] The table view shows the same rows as the chart.
+- [x] ~~The table view shows the same rows as the chart.~~ Cut; see above.
 - [ ] `schema.ts` regenerated and committed.
 - [ ] `docs/ROADMAP.md` Phase 3 marked complete; `CLAUDE.md` updated with any
       new convention settled here.

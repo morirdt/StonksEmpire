@@ -234,7 +234,7 @@ async def test_a_put_round_trips(auth_client: AsyncClient) -> None:
         "/api/v1/me/chart-preferences",
         json={
             "default_range": "6M",
-            "active_overlays": ["ema_12"],
+            "active_overlays": ["sma_200"],
             "active_oscillators": ["macd"],
         },
     )
@@ -302,8 +302,8 @@ async def test_repeated_puts_never_produce_a_second_row(
             id="an oscillator is not an overlay",
         ),
         pytest.param(
-            {"default_range": "1Y", "active_overlays": ["atr_14"], "active_oscillators": []},
-            id="a stored indicator the chart cannot draw",
+            {"default_range": "1Y", "active_overlays": ["ema_12"], "active_oscillators": []},
+            id="a stored indicator the price pane does not offer",
         ),
         pytest.param(
             {"default_range": "1Y", "active_overlays": [], "active_oscillators": ["sma_20"]},
@@ -316,7 +316,7 @@ async def test_repeated_puts_never_produce_a_second_row(
         pytest.param(
             {
                 "default_range": "1Y",
-                "active_overlays": ["sma_20", "sma_50", "sma_200", "ema_12"],
+                "active_overlays": ["sma_20", "sma_50", "sma_200", "sma_20"],
                 "active_oscillators": [],
             },
             id="more overlays than the price pane can carry",

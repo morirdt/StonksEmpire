@@ -56,13 +56,19 @@ class PriceOverlay(StrEnum):
     Only moving averages qualify: an overlay has to share the candles' y-scale
     to mean anything, which rules out RSI (0-100) and MACD (centred on zero).
     Each value is a column of ``daily_indicators``.
+
+    **Exactly three, and that is not an accident.** The validated overlay
+    palette has three slots, and the chart assigns colour by indicator identity
+    rather than by the order lines were switched on — otherwise turning one off
+    repaints the others. Those two facts together mean the number of overlay
+    identities cannot exceed the number of slots, or some pair is permanently
+    the same colour. The stored EMAs are deliberately absent for that reason:
+    they exist to feed MACD, which has its own pane.
     """
 
     SMA_20 = "sma_20"
     SMA_50 = "sma_50"
     SMA_200 = "sma_200"
-    EMA_12 = "ema_12"
-    EMA_26 = "ema_26"
 
 
 class Oscillator(StrEnum):

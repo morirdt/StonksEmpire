@@ -115,7 +115,7 @@ CALLER_SCOPED_RESOURCES: list[CallerScopedCase] = [
         },
         theirs={
             "default_range": "2Y",
-            "active_overlays": ["ema_12", "ema_26"],
+            "active_overlays": ["sma_50", "sma_200"],
             "active_oscillators": ["macd"],
         },
     ),

@@ -150,6 +150,48 @@ Settled in Phase 2. Everything that reads prices after it depends on these.
 - `make seed` and `make backfill` are **never automatic**. Phase 5's worker is
   what schedules them.
 
+### Charting conventions
+
+Settled in Phase 3. Everything that draws a chart after it depends on these.
+
+- **The chart wrapper lives in `components/chart/` and knows nothing about
+  symbols.** It takes already-shaped series plus a colour set, owns the
+  `createChart` lifecycle, and disposes on unmount. Phase 6's equity curve
+  reuses it, and features may not import each other.
+- **`lightweight-charts` renders to canvas, so nothing tests the pixels.** The
+  coverage is paid back by `toChartSeries`, a pure function tested directly;
+  page tests stub the wrapper. Say so in any new chart test file rather than
+  leaving the gap to be assumed.
+- **Chart colours are never read through `theme.palette.*`.** The MUI theme
+  runs on CSS variables, so `palette.profit.main` is the string
+  `var(--mui-palette-profit-main)` — a canvas paints nothing with that.
+  `components/chart/chartTheme.ts` holds real values, per mode.
+- **Colour is computable, so compute it.** Any change to a chart colour is
+  re-checked with `scripts/validate_palette.js` from the `dataviz` skill
+  against the real surface, in both modes — never reasoned about. The command
+  lines are in `chartTheme.ts`. This caught two failing values in the Phase 3
+  spec before a line of chart code existed.
+- **`profit` vs `loss` is ΔE 4.4 under deuteranopia**, far below the ≥8 target,
+  so **direction is never carried by hue alone**: candles are hollow up and
+  filled down. Do not repaint the palette tokens — Phase 2 depends on them, and
+  the quote grid already signs its numbers, which is the same kind of second
+  encoding.
+- **Volume takes one neutral hue and its own pane. No chart here ever gets a
+  second y-axis.** Two independent scales make any apparent crossing an
+  artefact of how they were scaled.
+- **Overlay colour is fixed per indicator identity, never per position** — or
+  turning one line off repaints the others. There are three validated slots, so
+  there are exactly three overlay identities; a fourth needs a fourth validated
+  colour first.
+- **A missing indicator value is an absent `value`, never a zero.** Zero plots a
+  line to the bottom of the pane and reads as a crash — which is what the
+  leading 199 bars of a 200-day average would do.
+- Every canvas chart ships a crosshair readout **in HTML**, not painted into the
+  canvas: canvas text is unselectable and invisible to a screen reader. Phase 3
+  also built a table view of the same rows and then removed it on request, so
+  the readout is currently the only non-visual path to the data — worth
+  revisiting in Phase 7's accessibility pass.
+
 ### Testing conventions
 
 - Database tests live in `tests/integration/` and use the fixtures in its
@@ -159,11 +201,16 @@ Settled in Phase 2. Everything that reads prices after it depends on these.
 - **The integration client speaks `https://testserver`.** The refresh cookie is
   `Secure` outside `local`, and a cookie jar will not return a `Secure` cookie
   over plain HTTP — so an `http://` client silently loses every refresh test.
-- **Every phase that adds a user-scoped resource appends it to
-  `CROSS_USER_RESOURCES`** in `tests/integration/test_cross_user_authorization.py`.
-  Prefer `404` over `403` for another user's row: `403` confirms it exists. The
-  harness builds the other user's rows through the API, so a new resource needs
-  a fixture there too, not just a path entry.
+- **Every phase that adds a user-scoped resource appends it to one of the two
+  registries** in `tests/integration/test_cross_user_authorization.py`.
+  `CROSS_USER_RESOURCES` is for resources addressed by an id in the path — name
+  another user's row, expect to be denied; prefer `404` over `403`, since `403`
+  confirms the row exists. `CALLER_SCOPED_RESOURCES` is for `/me/...` resources
+  whose identity *is* the caller, where 200 is the right answer and the real
+  failure is one user's write landing on another's row. Putting a caller-scoped
+  endpoint in the first list asserts something false. The harness builds the
+  other user's rows through the API, so a new resource needs a fixture there
+  too, not just a path entry.
 - **One contract suite runs against every provider**, parameterized in
   `tests/unit/test_market_data_contract.py`. Adding a provider means adding one
   entry to `PROVIDERS`; if it does not pass unchanged, the seam has leaked.
