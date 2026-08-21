@@ -8,7 +8,19 @@ its table.
 
 from __future__ import annotations
 
+from app.models.market_data import DailyBar, DailyIndicator, LatestQuote
 from app.models.refresh_token import RefreshToken
+from app.models.symbol import Symbol
 from app.models.user import User
+from app.models.watchlist import Watchlist, WatchlistItem
 
-__all__: list[str] = ["RefreshToken", "User"]
+__all__: list[str] = [
+    "DailyBar",
+    "DailyIndicator",
+    "LatestQuote",
+    "RefreshToken",
+    "Symbol",
+    "User",
+    "Watchlist",
+    "WatchlistItem",
+]
