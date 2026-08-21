@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 
+from app.models.symbol import Symbol
 from tests.integration.conftest import VALID_PASSWORD, unique_email
 
 pytestmark = pytest.mark.integration
@@ -45,7 +46,28 @@ class ResourceCase:
 # Later phases append here. Phase 2: watchlists. Phase 5: alerts. Phase 6:
 # trades and executions. Keep one entry per method that touches a user's row.
 # ---------------------------------------------------------------------------
-CROSS_USER_RESOURCES: list[ResourceCase] = []
+CROSS_USER_RESOURCES: list[ResourceCase] = [
+    # Phase 2 — watchlists. Every method that names another user's row.
+    ResourceCase("GET", "/api/v1/watchlists/{watchlist_id}"),
+    ResourceCase(
+        "PATCH",
+        "/api/v1/watchlists/{watchlist_id}",
+        body={"name": "hijacked"},
+    ),
+    ResourceCase("DELETE", "/api/v1/watchlists/{watchlist_id}"),
+    ResourceCase("GET", "/api/v1/watchlists/{watchlist_id}/quotes"),
+    ResourceCase(
+        "POST",
+        "/api/v1/watchlists/{watchlist_id}/items",
+        body={"ticker": "MSFT"},
+    ),
+    ResourceCase(
+        "PATCH",
+        "/api/v1/watchlists/{watchlist_id}/items",
+        body={"item_ids": ["00000000-0000-7000-8000-000000000000"]},
+    ),
+    ResourceCase("DELETE", "/api/v1/watchlists/{watchlist_id}/items/{item_id}"),
+]
 
 
 async def _register_another_user(client: AsyncClient) -> dict[str, str]:
@@ -59,6 +81,38 @@ async def _register_another_user(client: AsyncClient) -> dict[str, str]:
     return {"email": email, "access_token": response.json()["access_token"]}
 
 
+@pytest.fixture
+async def other_users_rows(
+    client: AsyncClient,
+    seeded_symbols: list[Symbol],
+) -> dict[str, str]:
+    """A watchlist with one item, owned by somebody who is not the caller.
+
+    Built through the API rather than the session, so the ids are exactly what
+    a real client would hold — and so a scoping bug in creation shows up here
+    too rather than being papered over by a direct insert.
+    """
+    other = await _register_another_user(client)
+    headers = {"Authorization": f"Bearer {other['access_token']}"}
+
+    created = await client.post(
+        "/api/v1/watchlists",
+        json={"name": "Private list"},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    watchlist_id = created.json()["id"]
+
+    item = await client.post(
+        f"/api/v1/watchlists/{watchlist_id}/items",
+        json={"ticker": seeded_symbols[0].ticker},
+        headers=headers,
+    )
+    assert item.status_code == 201, item.text
+
+    return {"watchlist_id": watchlist_id, "item_id": item.json()["id"]}
+
+
 @pytest.mark.skipif(
     not CROSS_USER_RESOURCES,
     reason="No user-scoped resources yet; Phase 2 fills this list.",
@@ -66,11 +120,43 @@ async def _register_another_user(client: AsyncClient) -> dict[str, str]:
 @pytest.mark.parametrize("case", CROSS_USER_RESOURCES, ids=lambda c: f"{c.method} {c.path}")
 async def test_one_user_cannot_touch_another_users_resource(
     auth_client: AsyncClient,
+    other_users_rows: dict[str, str],
     case: ResourceCase,
 ) -> None:
-    response = await auth_client.request(case.method, case.path, json=case.body)
+    response = await auth_client.request(
+        case.method,
+        case.path.format(**other_users_rows),
+        json=case.body,
+    )
 
-    assert response.status_code in DENIED
+    assert response.status_code in DENIED, (
+        f"{case.method} {case.path} leaked another user's row "
+        f"with {response.status_code}: {response.text}"
+    )
+
+
+async def test_another_users_watchlist_is_404_not_403(
+    auth_client: AsyncClient,
+    other_users_rows: dict[str, str],
+) -> None:
+    """403 would confirm the row exists, which is the leak we are avoiding.
+
+    The harness above accepts either status because some resources' existence
+    is not secret. A watchlist's is: knowing an id is valid tells you something.
+    """
+    response = await auth_client.get(f"/api/v1/watchlists/{other_users_rows['watchlist_id']}")
+
+    assert response.status_code == 404
+
+
+async def test_another_users_watchlist_is_absent_from_the_listing(
+    auth_client: AsyncClient,
+    other_users_rows: dict[str, str],
+) -> None:
+    response = await auth_client.get("/api/v1/watchlists")
+
+    assert response.status_code == 200
+    assert other_users_rows["watchlist_id"] not in {w["id"] for w in response.json()}
 
 
 async def test_me_returns_the_caller_not_the_last_registered_user(
