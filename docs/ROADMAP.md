@@ -12,7 +12,7 @@ spec because agents trust it.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Scaffold, tooling, Docker, Alembic, CI | ✅ complete |
-| 1 | Auth & users | ⬜ next — [spec](phases/phase-1-auth.md) |
+| 1 | Auth & users | 🚧 in progress — [spec](phases/phase-1-auth.md) |
 | 2 | Market data foundation + watchlists | ⬜ |
 | 3 | Analysis & charting | ⬜ |
 | 4 | Screeners | ⬜ |
@@ -28,6 +28,12 @@ naming convention and a baseline extensions migration · Vite + React + MUI with
 dark-first themed shell, TanStack Query, and a generated typed API client ·
 Docker Compose (Postgres + API + web) · ruff/mypy/ESLint/Prettier/pre-commit ·
 five-job CI pipeline.
+
+The pipeline was fixed on first execution — it had never actually run, since its
+push trigger only matched `main` and no pull request had been opened. Every
+component was also pinned to Python 3.14.7, which retires the `uuid-utils`
+dependency Phase 1 was going to add: `uuid.uuid7()` is in the standard library
+there.
 
 ## Phase 1 — Auth & users
 

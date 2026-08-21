@@ -76,10 +76,10 @@ Cross-cutting:
 
 These bind every table; follow them without being asked.
 
-- **Primary keys are UUIDv7**, via `uuid_utils.compat.uuid7` (returns a real
-  `uuid.UUID`, so SQLAlchemy's `Uuid` type handles it natively). Time-ordered,
-  so they index well and do not leak row counts. `uuid.uuid7()` arrives in
-  Python 3.14 — drop the dependency then.
+- **Primary keys are UUIDv7**, via the standard library's `uuid.uuid7()` (the
+  project runs Python 3.14, where it landed). SQLAlchemy's `Uuid` type handles
+  the result natively. Time-ordered, so they index well and do not leak row
+  counts. Do not add `uuid-utils`; it existed only to backfill this.
 - **All timestamps are `TIMESTAMPTZ` stored in UTC.** Use `TimestampMixin` from
   `app/db/base.py` for `created_at`/`updated_at`; the database maintains them.
 - **Money and prices are `NUMERIC`, never float** — `NUMERIC(18, 6)` for prices
@@ -140,6 +140,12 @@ server.
 
 ## Version constraints worth knowing
 
+- **Python is pinned to exactly 3.14.7**, in `backend/.python-version`,
+  `requires-python`, the mypy target, both Dockerfile stages, and CI's
+  `setup-uv`. The builder stage shares the production base image and copies the
+  uv binary in, because uv's own images are tagged by minor version only and
+  ship a different patch release — which an exact pin cannot satisfy under
+  `UV_PYTHON_DOWNLOADS=never`. Bump all five together.
 - **TypeScript is pinned to 6.x on purpose.** `openapi-typescript` 7.13 crashes
   on TypeScript 7 (`ts.factory` is undefined under the new compiler). Do not
   bump it until that is fixed upstream.
@@ -148,3 +154,7 @@ server.
 - Config tests build `Settings` with `_env_file=None` so they test declared
   defaults rather than the developer's `.env`. Note `os.environ` outranks both,
   so avoid pinning config values in `conftest.py` unless every test wants them.
+  For the same reason, never assert on a literal environment name: `conftest.py`
+  sets `ENVIRONMENT` with `os.environ.setdefault`, which is a no-op in CI (where
+  the workflow already exports `ENVIRONMENT=ci`). Compare against
+  `get_settings().environment` instead.
