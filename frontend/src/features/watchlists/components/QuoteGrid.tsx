@@ -48,7 +48,13 @@ interface GridRow {
  * `profit` / `loss` are palette tokens, never green/red literals — the theme
  * owns what those look like, including in light mode.
  */
-function ChangeCell({ value, format }: { value: string | null; format: (v: string | null) => string }) {
+function ChangeCell({
+  value,
+  format,
+}: {
+  value: string | null;
+  format: (v: string | null) => string;
+}) {
   const tone = changeTone(value);
   return (
     <Box
@@ -64,7 +70,13 @@ function ChangeCell({ value, format }: { value: string | null; format: (v: strin
   );
 }
 
-export function QuoteGrid({ rows, loading = false, onRemove, onMove, busy = false }: QuoteGridProps) {
+export function QuoteGrid({
+  rows,
+  loading = false,
+  onRemove,
+  onMove,
+  busy = false,
+}: QuoteGridProps) {
   const gridRows = useMemo<GridRow[]>(
     () =>
       rows.map((row, index) => ({
@@ -91,7 +103,9 @@ export function QuoteGrid({ rows, loading = false, onRemove, onMove, busy = fals
         flex: 0.8,
         minWidth: 110,
         renderCell: (params: GridRenderCellParams<GridRow>) => (
-          <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: 1 }}>
+          <Box
+            sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: 1 }}
+          >
             <Typography variant="body2" sx={{ fontWeight: 700 }}>
               {params.row.ticker}
             </Typography>
