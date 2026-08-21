@@ -8,4 +8,7 @@ its table.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from app.models.refresh_token import RefreshToken
+from app.models.user import User
+
+__all__: list[str] = ["RefreshToken", "User"]
