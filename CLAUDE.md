@@ -42,6 +42,13 @@ integration is enabled.
 - **`.env` lives only at the repo root.** `app/core/config.py` resolves it by
   path relative to the source file, not the working directory, so `make` targets
   work from anywhere. A `backend/.env` overrides it if present.
+- **After changing dependencies, recreate the container's anonymous volume:**
+  `docker compose up -d -V --build <service>`. Both `api` and `web` keep their
+  installed packages in an anonymous volume that Compose *preserves* across
+  `up --build`, so the stale one gets mounted over the new image: the API dies
+  with `ModuleNotFoundError` and Vite fails to resolve the new import. `-V`
+  renews anonymous volumes; the Postgres volume is named and unaffected. Never
+  use `down -v` for this — it destroys the database.
 - The working tree is on a Windows drive mounted into WSL, where small-file I/O
   is ~150× slower than the Linux filesystem. `pnpm install` takes minutes; this
   is expected. `frontend/.npmrc` sets `node-linker=hoisted` — do **not** add
@@ -108,6 +115,41 @@ Settled in Phase 1; every user-scoped feature after it depends on these.
   single in-flight refresh in `lib/api/client.ts`; firing one refresh per request
   spends rotated tokens and gets the session family revoked.
 
+### Market data conventions
+
+Settled in Phase 2. Everything that reads prices after it depends on these.
+
+- **`Fake` is the default provider and is not a test double.** No provider
+  account exists, so it is the only implementation; Finnhub and Tiingo are
+  specified behind `MarketDataProvider` but unbuilt. A fresh clone must come up
+  working and the whole suite must pass with no API key set — selecting a real
+  provider without its key fails at startup.
+- **Providers never implement resilience.** `ResilientProvider` wraps any of
+  them with rate limiting, retry, and a circuit breaker. Order matters: an open
+  breaker fails fast before spending a token or a retry.
+- **An unknown ticker is `NotFoundError`, never `ExternalServiceError`**, and
+  does not count toward the breaker. Otherwise one typo in a watchlist trips
+  the provider for every user.
+- **A provider outage degrades, it does not fail.** `/ready` reports
+  `market_data` as a named check but only `_REQUIRED_CHECKS` decides the
+  status, and stale quotes are served with their real `fetched_at` rather than
+  blanking the grid.
+- **Indicators are computed, never fetched**, in `Decimal` — no pandas, no
+  numpy. EMA seeds from the SMA of its first window; RSI and ATR use Wilder's
+  smoothing, not a same-period EMA; the MACD signal is an EMA *of the MACD
+  line*, so it starts 8 bars later. Recompute over the symbol's whole stored
+  series, never just the fetched window.
+- **`latest_quotes` is written by a Core upsert, so its reads need
+  `populate_existing`.** The identity map does not see Core statements and the
+  session does not expire on commit, so a row already loaded in the request
+  keeps serving pre-upsert values — which made the grid render the price it had
+  just refreshed away.
+- Prices cross the wire as **strings** (Pydantic serialises `Decimal` that
+  way). On the frontend they are parsed only in `lib/format.ts`, at the point
+  of display or sorting, and never passed around as numbers.
+- `make seed` and `make backfill` are **never automatic**. Phase 5's worker is
+  what schedules them.
+
 ### Testing conventions
 
 - Database tests live in `tests/integration/` and use the fixtures in its
@@ -119,7 +161,12 @@ Settled in Phase 1; every user-scoped feature after it depends on these.
   over plain HTTP — so an `http://` client silently loses every refresh test.
 - **Every phase that adds a user-scoped resource appends it to
   `CROSS_USER_RESOURCES`** in `tests/integration/test_cross_user_authorization.py`.
-  Prefer `404` over `403` for another user's row: `403` confirms it exists.
+  Prefer `404` over `403` for another user's row: `403` confirms it exists. The
+  harness builds the other user's rows through the API, so a new resource needs
+  a fixture there too, not just a path entry.
+- **One contract suite runs against every provider**, parameterized in
+  `tests/unit/test_market_data_contract.py`. Adding a provider means adding one
+  entry to `PROVIDERS`; if it does not pass unchanged, the seam has leaked.
 
 ### Dependency policy
 
