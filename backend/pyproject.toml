@@ -9,7 +9,7 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "asyncpg",
     "alembic",
-    "pydantic",
+    "pydantic[email]",
     "pydantic-settings",
     "structlog",
     "sentry-sdk[fastapi]",
