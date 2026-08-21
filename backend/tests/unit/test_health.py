@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient
 
 import app.api.health as health_module
+from app.core.config import get_settings
 
 
 async def test_health_reports_ok(client: AsyncClient) -> None:
@@ -12,7 +13,7 @@ async def test_health_reports_ok(client: AsyncClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["environment"] == "test"
+    assert body["environment"] == get_settings().environment
     assert body["version"]
 
 

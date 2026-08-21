@@ -1,7 +1,13 @@
 # syntax=docker/dockerfile:1
 
 # ---------------------------------------------------------------- builder ---
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+# Built on the same image as the production stage so the virtualenv is created
+# against the exact interpreter that will run it. uv's own python3.14 image is
+# tagged by minor version only (it currently ships 3.14.2), which cannot satisfy
+# the 3.14.7 pin in .python-version, so the uv binary is copied in instead.
+FROM python:3.14.7-slim-bookworm AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -11,7 +17,7 @@ WORKDIR /app
 
 # Dependencies are installed in their own layer so that application code
 # changes do not invalidate the (slow) dependency install.
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock .python-version ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-dev
 
@@ -30,7 +36,7 @@ EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
 # ------------------------------------------------------------- production ---
-FROM python:3.13-slim-bookworm AS production
+FROM python:3.14.7-slim-bookworm AS production
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

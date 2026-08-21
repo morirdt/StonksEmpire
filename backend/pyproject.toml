@@ -2,7 +2,7 @@
 name = "stonks-empire-backend"
 version = "0.1.0"
 description = "Stonks Empire — stock trading utilities API"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
@@ -65,7 +65,7 @@ known-first-party = ["app"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 files = ["app"]
 plugins = ["pydantic.mypy"]
 strict = true
