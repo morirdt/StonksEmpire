@@ -97,6 +97,11 @@ Every provider failure surfaces as `ExternalServiceError` from
 
 ### Implementations
 
+> **Not built in Phase 2** — see `## Decisions`. No provider account exists, so
+> Finnhub and Tiingo remain specified-but-unimplemented behind the protocol, and
+> `Fake` is the only concrete provider. The rest of this section is the contract
+> whichever one gets built first must satisfy.
+
 - **Finnhub** — quotes and the symbol universe.
 - **Tiingo** — daily bar history.
 - **Fake** — deterministic pseudo-random walks seeded by ticker, so the same
@@ -308,7 +313,9 @@ the adjusted prices the provider supplies.
 - [ ] `make check` green; `make migration-check` reports no drift.
 - [ ] Migrations round-trip: `alembic downgrade base` → `upgrade head`.
 - [ ] The app starts and the full test suite passes with **no API keys set**.
-- [ ] Contract tests pass identically against all three providers.
+- [ ] Contract tests pass identically against every implemented provider
+      (`Fake` alone in this phase — the suite is parameterized so a real one
+      joins without edits).
 - [ ] `make seed` then `make backfill` populates bars and indicators; running
       both a second time changes nothing.
 - [ ] A provider outage degrades `/ready` to a named failing check without
@@ -321,18 +328,34 @@ the adjusted prices the provider supplies.
 - [ ] `docs/ROADMAP.md` Phase 2 marked complete; `CLAUDE.md` updated with any new
       convention settled here.
 
-## Open questions
+## Decisions
 
-These change the work materially and are worth answering before starting rather
-than during:
+The spec's open questions were answered before implementation started. Recorded
+here because each one shapes code that is expensive to change later.
 
-1. **Which provider accounts exist?** If only one key is available, build that
-   provider plus `Fake` and leave the other behind the protocol. Nothing
-   downstream cares.
-2. **How big is the universe really?** `universe_max_symbols` defaults to 1000
-   as a guess. A curated few hundred liquid names backfills in minutes; a full
-   US listing on a free tier takes days and shapes the whole ingest design.
-3. **How much history?** Two years covers `sma_200` with room to spare and keeps
-   the backfill small. Ten years is a different sizing conversation.
-4. **Is the indicator list right?** It is the conventional set, but Phase 4
-   screens against exactly these columns, and adding one later is a migration.
+1. **No provider accounts exist — `Fake` is the only implementation built.**
+   Finnhub and Tiingo stay behind the `MarketDataProvider` protocol, unbuilt.
+   This is exactly the case the protocol was designed for, and it costs nothing
+   downstream: the data layer, the scripts, the endpoints, and the whole
+   watchlist feature are provider-agnostic by construction. The contract test
+   suite is still parameterized, so adding a real provider later means writing
+   one class and one fixture, not editing anything that consumes it.
+
+   The consequence worth naming: `list_symbols()` has no upstream to call, so
+   the universe ships as a curated list in-tree (see below) that `Fake` serves.
+
+2. **The universe is ~500 curated liquid names** — large-cap US equities plus
+   liquid ETFs, checked into the repo as a data file rather than fetched. It
+   backfills in minutes, exercises every code path, and is broad enough for
+   Phase 3 charting and Phase 4 screening to be interesting. The
+   `universe_max_symbols` ceiling of 1000 stays as declared and is not reached.
+
+3. **Two years of daily history.** Covers `sma_200` with roughly 250 bars of
+   headroom, which is what makes the leading-`NULL` window testable rather than
+   theoretical. Deeper history is a script re-run, not a migration, so this is
+   the cheap end of a reversible decision.
+
+4. **The indicator column list stands as specced** — `sma_20`, `sma_50`,
+   `sma_200`, `ema_12`, `ema_26`, `rsi_14`, `macd`, `macd_signal`,
+   `macd_histogram`, `atr_14`, `volume_sma_20`. Phase 4 screens against exactly
+   these; adding one later is a migration, and that was accepted knowingly.
