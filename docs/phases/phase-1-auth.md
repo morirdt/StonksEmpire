@@ -15,7 +15,10 @@ Backend (`cd backend && uv add …`):
 |---|---|
 | `pwdlib[argon2]` | Argon2id password hashing |
 | `pyjwt` | Access-token encode/decode |
-| `uuid-utils` | UUIDv7 primary keys |
+
+UUIDv7 primary keys come from the standard library's `uuid.uuid7()` — the
+project moved to Python 3.14 in Phase 0, so the `uuid-utils` backfill this spec
+originally called for is no longer needed.
 
 Frontend (`cd frontend && pnpm add …`):
 

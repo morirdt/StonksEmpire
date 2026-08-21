@@ -76,10 +76,10 @@ Cross-cutting:
 
 These bind every table; follow them without being asked.
 
-- **Primary keys are UUIDv7**, via `uuid_utils.compat.uuid7` (returns a real
-  `uuid.UUID`, so SQLAlchemy's `Uuid` type handles it natively). Time-ordered,
-  so they index well and do not leak row counts. `uuid.uuid7()` arrives in
-  Python 3.14 — drop the dependency then.
+- **Primary keys are UUIDv7**, via the standard library's `uuid.uuid7()` (the
+  project runs Python 3.14, where it landed). SQLAlchemy's `Uuid` type handles
+  the result natively. Time-ordered, so they index well and do not leak row
+  counts. Do not add `uuid-utils`; it existed only to backfill this.
 - **All timestamps are `TIMESTAMPTZ` stored in UTC.** Use `TimestampMixin` from
   `app/db/base.py` for `created_at`/`updated_at`; the database maintains them.
 - **Money and prices are `NUMERIC`, never float** — `NUMERIC(18, 6)` for prices
@@ -89,6 +89,37 @@ These bind every table; follow them without being asked.
   and a composite index leading with `user_id`.
 - Email addresses use `citext` (the extension is enabled in the baseline
   migration) so uniqueness and lookup are case-insensitive.
+
+### Auth conventions
+
+Settled in Phase 1; every user-scoped feature after it depends on these.
+
+- **Protected routes take `CurrentUser` from `app/api/deps.py`.** It resolves the
+  bearer token *and* rejects deactivated accounts, so deactivation takes effect
+  within one access-token lifetime rather than at next login.
+- **Access tokens are 15-minute JWTs; refresh tokens are opaque, rotating, and
+  stored as SHA-256.** Presenting an already-revoked refresh token revokes its
+  whole family — reuse is treated as theft.
+- **Never widen an auth failure message.** Unknown email, wrong password, and
+  deactivated account all return the same 401 body, and unknown emails are still
+  verified against a dummy hash so timing does not enumerate accounts.
+- On the frontend the access token lives in `lib/api/session.ts` and nowhere
+  else — never `localStorage`, never a cookie. Concurrent 401s must share the
+  single in-flight refresh in `lib/api/client.ts`; firing one refresh per request
+  spends rotated tokens and gets the session family revoked.
+
+### Testing conventions
+
+- Database tests live in `tests/integration/` and use the fixtures in its
+  `conftest.py`: migrate once per session, then wrap each test in a transaction
+  that is rolled back. The session joins it with a savepoint, so service-level
+  `commit()` calls still land somewhere disposable.
+- **The integration client speaks `https://testserver`.** The refresh cookie is
+  `Secure` outside `local`, and a cookie jar will not return a `Secure` cookie
+  over plain HTTP — so an `http://` client silently loses every refresh test.
+- **Every phase that adds a user-scoped resource appends it to
+  `CROSS_USER_RESOURCES`** in `tests/integration/test_cross_user_authorization.py`.
+  Prefer `404` over `403` for another user's row: `403` confirms it exists.
 
 ### Dependency policy
 
@@ -140,6 +171,12 @@ server.
 
 ## Version constraints worth knowing
 
+- **Python is pinned to exactly 3.14.7**, in `backend/.python-version`,
+  `requires-python`, the mypy target, both Dockerfile stages, and CI's
+  `setup-uv`. The builder stage shares the production base image and copies the
+  uv binary in, because uv's own images are tagged by minor version only and
+  ship a different patch release — which an exact pin cannot satisfy under
+  `UV_PYTHON_DOWNLOADS=never`. Bump all five together.
 - **TypeScript is pinned to 6.x on purpose.** `openapi-typescript` 7.13 crashes
   on TypeScript 7 (`ts.factory` is undefined under the new compiler). Do not
   bump it until that is fixed upstream.
@@ -148,3 +185,7 @@ server.
 - Config tests build `Settings` with `_env_file=None` so they test declared
   defaults rather than the developer's `.env`. Note `os.environ` outranks both,
   so avoid pinning config values in `conftest.py` unless every test wants them.
+  For the same reason, never assert on a literal environment name: `conftest.py`
+  sets `ENVIRONMENT` with `os.environ.setdefault`, which is a no-op in CI (where
+  the workflow already exports `ENVIRONMENT=ci`). Compare against
+  `get_settings().environment` instead.

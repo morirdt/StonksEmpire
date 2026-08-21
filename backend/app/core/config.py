@@ -6,6 +6,7 @@ groups use a double-underscore delimiter, e.g. ``DB__HOST=localhost``.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
@@ -52,6 +53,30 @@ class DatabaseSettings(BaseModel):
         return f"postgresql+asyncpg://{self.user}:***@{self.host}:{self.port}/{self.name}"
 
 
+class AuthSettings(BaseModel):
+    """Token lifetimes and signing algorithm.
+
+    Access tokens are short-lived because they cannot be revoked; refresh
+    tokens are long-lived because they can (see ``refresh_tokens``).
+    """
+
+    algorithm: str = "HS256"
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
+
+    # Rate limits, per client IP. In-process only until Redis arrives.
+    login_attempts_per_minute: int = 10
+    register_attempts_per_hour: int = 5
+
+    @property
+    def access_token_ttl(self) -> timedelta:
+        return timedelta(minutes=self.access_token_ttl_minutes)
+
+    @property
+    def refresh_token_ttl(self) -> timedelta:
+        return timedelta(days=self.refresh_token_ttl_days)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Anchored to the repo, not the process CWD: the API runs from
@@ -86,6 +111,7 @@ class Settings(BaseSettings):
 
     # --- nested groups ---
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
 
     @property
     def is_prod(self) -> bool:

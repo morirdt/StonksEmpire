@@ -12,7 +12,7 @@ spec because agents trust it.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Scaffold, tooling, Docker, Alembic, CI | ✅ complete |
-| 1 | Auth & users | ⬜ next — [spec](phases/phase-1-auth.md) |
+| 1 | Auth & users | ✅ complete — [spec](phases/phase-1-auth.md) |
 | 2 | Market data foundation + watchlists | ⬜ |
 | 3 | Analysis & charting | ⬜ |
 | 4 | Screeners | ⬜ |
@@ -29,7 +29,13 @@ dark-first themed shell, TanStack Query, and a generated typed API client ·
 Docker Compose (Postgres + API + web) · ruff/mypy/ESLint/Prettier/pre-commit ·
 five-job CI pipeline.
 
-## Phase 1 — Auth & users
+The pipeline was fixed on first execution — it had never actually run, since its
+push trigger only matched `main` and no pull request had been opened. Every
+component was also pinned to Python 3.14.7, which retires the `uuid-utils`
+dependency Phase 1 was going to add: `uuid.uuid7()` is in the standard library
+there.
+
+## Phase 1 — Auth & users ✅
 
 **Spec: [`docs/phases/phase-1-auth.md`](phases/phase-1-auth.md)**
 
@@ -37,6 +43,12 @@ five-job CI pipeline.
 rotating refresh tokens and reuse detection · login rate limiting · frontend auth
 store, login/register pages, protected routes, 401-refresh-retry interceptor ·
 cross-user authorization test harness.
+
+Two things worth carrying forward. The concurrent-401 case needed an explicit
+test: because refresh tokens rotate and reuse is treated as theft, a client that
+fires one refresh per failed request revokes its own session — and a naive
+implementation passes every other assertion. And `email-validator` joined the
+dependency list, which the spec's table had missed.
 
 ## Phase 2 — Market data + watchlists
 

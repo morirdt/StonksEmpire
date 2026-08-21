@@ -9,10 +9,12 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "asyncpg",
     "alembic",
-    "pydantic",
+    "pydantic[email]",
     "pydantic-settings",
     "structlog",
     "sentry-sdk[fastapi]",
+    "pwdlib[argon2]>=0.3.1",
+    "pyjwt>=2.13.0",
 ]
 
 [dependency-groups]
