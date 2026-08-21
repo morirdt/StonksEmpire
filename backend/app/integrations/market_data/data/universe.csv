@@ -1,0 +1,534 @@
+ticker,name,exchange,asset_type,currency
+AAPL,Apple Inc.,NASDAQ,common_stock,USD
+MSFT,Microsoft Corporation,NASDAQ,common_stock,USD
+NVDA,NVIDIA Corporation,NASDAQ,common_stock,USD
+GOOGL,Alphabet Inc. Class A,NASDAQ,common_stock,USD
+GOOG,Alphabet Inc. Class C,NASDAQ,common_stock,USD
+AMZN,Amazon.com Inc.,NASDAQ,common_stock,USD
+META,Meta Platforms Inc.,NASDAQ,common_stock,USD
+AVGO,Broadcom Inc.,NASDAQ,common_stock,USD
+TSLA,Tesla Inc.,NASDAQ,common_stock,USD
+ORCL,Oracle Corporation,NYSE,common_stock,USD
+CRM,Salesforce Inc.,NYSE,common_stock,USD
+AMD,Advanced Micro Devices Inc.,NASDAQ,common_stock,USD
+ADBE,Adobe Inc.,NASDAQ,common_stock,USD
+CSCO,Cisco Systems Inc.,NASDAQ,common_stock,USD
+ACN,Accenture plc,NYSE,common_stock,USD
+INTC,Intel Corporation,NASDAQ,common_stock,USD
+IBM,International Business Machines Corporation,NYSE,common_stock,USD
+QCOM,QUALCOMM Incorporated,NASDAQ,common_stock,USD
+TXN,Texas Instruments Incorporated,NASDAQ,common_stock,USD
+NOW,ServiceNow Inc.,NYSE,common_stock,USD
+INTU,Intuit Inc.,NASDAQ,common_stock,USD
+AMAT,Applied Materials Inc.,NASDAQ,common_stock,USD
+MU,Micron Technology Inc.,NASDAQ,common_stock,USD
+ADI,Analog Devices Inc.,NASDAQ,common_stock,USD
+LRCX,Lam Research Corporation,NASDAQ,common_stock,USD
+KLAC,KLA Corporation,NASDAQ,common_stock,USD
+SNPS,Synopsys Inc.,NASDAQ,common_stock,USD
+CDNS,Cadence Design Systems Inc.,NASDAQ,common_stock,USD
+PANW,Palo Alto Networks Inc.,NASDAQ,common_stock,USD
+CRWD,CrowdStrike Holdings Inc.,NASDAQ,common_stock,USD
+FTNT,Fortinet Inc.,NASDAQ,common_stock,USD
+ANET,Arista Networks Inc.,NYSE,common_stock,USD
+MRVL,Marvell Technology Inc.,NASDAQ,common_stock,USD
+NXPI,NXP Semiconductors N.V.,NASDAQ,common_stock,USD
+MCHP,Microchip Technology Incorporated,NASDAQ,common_stock,USD
+ON,ON Semiconductor Corporation,NASDAQ,common_stock,USD
+SWKS,Skyworks Solutions Inc.,NASDAQ,common_stock,USD
+TER,Teradyne Inc.,NASDAQ,common_stock,USD
+ENPH,Enphase Energy Inc.,NASDAQ,common_stock,USD
+FSLR,First Solar Inc.,NASDAQ,common_stock,USD
+WDC,Western Digital Corporation,NASDAQ,common_stock,USD
+STX,Seagate Technology Holdings plc,NASDAQ,common_stock,USD
+NTAP,NetApp Inc.,NASDAQ,common_stock,USD
+HPQ,HP Inc.,NYSE,common_stock,USD
+HPE,Hewlett Packard Enterprise Company,NYSE,common_stock,USD
+DELL,Dell Technologies Inc.,NYSE,common_stock,USD
+SMCI,Super Micro Computer Inc.,NASDAQ,common_stock,USD
+ZS,Zscaler Inc.,NASDAQ,common_stock,USD
+OKTA,Okta Inc.,NASDAQ,common_stock,USD
+DDOG,Datadog Inc.,NASDAQ,common_stock,USD
+NET,Cloudflare Inc.,NYSE,common_stock,USD
+SNOW,Snowflake Inc.,NYSE,common_stock,USD
+MDB,MongoDB Inc.,NASDAQ,common_stock,USD
+TEAM,Atlassian Corporation,NASDAQ,common_stock,USD
+WDAY,Workday Inc.,NASDAQ,common_stock,USD
+ADSK,Autodesk Inc.,NASDAQ,common_stock,USD
+PTC,PTC Inc.,NASDAQ,common_stock,USD
+TYL,Tyler Technologies Inc.,NYSE,common_stock,USD
+EPAM,EPAM Systems Inc.,NYSE,common_stock,USD
+CTSH,Cognizant Technology Solutions Corporation,NASDAQ,common_stock,USD
+INFY,Infosys Limited,NYSE,adr,USD
+IT,Gartner Inc.,NYSE,common_stock,USD
+FICO,Fair Isaac Corporation,NYSE,common_stock,USD
+MSI,Motorola Solutions Inc.,NYSE,common_stock,USD
+GLW,Corning Incorporated,NYSE,common_stock,USD
+KEYS,Keysight Technologies Inc.,NYSE,common_stock,USD
+TDY,Teledyne Technologies Incorporated,NYSE,common_stock,USD
+ZBRA,Zebra Technologies Corporation,NASDAQ,common_stock,USD
+JNPR,Juniper Networks Inc.,NYSE,common_stock,USD
+AKAM,Akamai Technologies Inc.,NASDAQ,common_stock,USD
+VRSN,VeriSign Inc.,NASDAQ,common_stock,USD
+TTD,The Trade Desk Inc.,NASDAQ,common_stock,USD
+APP,AppLovin Corporation,NASDAQ,common_stock,USD
+U,Unity Software Inc.,NYSE,common_stock,USD
+RBLX,Roblox Corporation,NYSE,common_stock,USD
+PLTR,Palantir Technologies Inc.,NASDAQ,common_stock,USD
+SPOT,Spotify Technology S.A.,NYSE,common_stock,USD
+UBER,Uber Technologies Inc.,NYSE,common_stock,USD
+LYFT,Lyft Inc.,NASDAQ,common_stock,USD
+ABNB,Airbnb Inc.,NASDAQ,common_stock,USD
+DASH,DoorDash Inc.,NASDAQ,common_stock,USD
+SHOP,Shopify Inc.,NYSE,common_stock,USD
+PYPL,PayPal Holdings Inc.,NASDAQ,common_stock,USD
+COIN,Coinbase Global Inc.,NASDAQ,common_stock,USD
+HOOD,Robinhood Markets Inc.,NASDAQ,common_stock,USD
+SOFI,SoFi Technologies Inc.,NASDAQ,common_stock,USD
+AFRM,Affirm Holdings Inc.,NASDAQ,common_stock,USD
+TWLO,Twilio Inc.,NYSE,common_stock,USD
+ZM,Zoom Communications Inc.,NASDAQ,common_stock,USD
+DOCU,Docusign Inc.,NASDAQ,common_stock,USD
+HUBS,HubSpot Inc.,NYSE,common_stock,USD
+VEEV,Veeva Systems Inc.,NYSE,common_stock,USD
+ROP,Roper Technologies Inc.,NASDAQ,common_stock,USD
+FI,Fiserv Inc.,NYSE,common_stock,USD
+FIS,Fidelity National Information Services Inc.,NYSE,common_stock,USD
+GPN,Global Payments Inc.,NYSE,common_stock,USD
+CSGP,CoStar Group Inc.,NASDAQ,common_stock,USD
+JPM,JPMorgan Chase & Co.,NYSE,common_stock,USD
+BAC,Bank of America Corporation,NYSE,common_stock,USD
+WFC,Wells Fargo & Company,NYSE,common_stock,USD
+C,Citigroup Inc.,NYSE,common_stock,USD
+GS,The Goldman Sachs Group Inc.,NYSE,common_stock,USD
+MS,Morgan Stanley,NYSE,common_stock,USD
+SCHW,The Charles Schwab Corporation,NYSE,common_stock,USD
+BLK,BlackRock Inc.,NYSE,common_stock,USD
+BX,Blackstone Inc.,NYSE,common_stock,USD
+KKR,KKR & Co. Inc.,NYSE,common_stock,USD
+APO,Apollo Global Management Inc.,NYSE,common_stock,USD
+ARES,Ares Management Corporation,NYSE,common_stock,USD
+SPGI,S&P Global Inc.,NYSE,common_stock,USD
+MCO,Moody's Corporation,NYSE,common_stock,USD
+MSCI,MSCI Inc.,NYSE,common_stock,USD
+ICE,Intercontinental Exchange Inc.,NYSE,common_stock,USD
+CME,CME Group Inc.,NASDAQ,common_stock,USD
+NDAQ,Nasdaq Inc.,NASDAQ,common_stock,USD
+CBOE,Cboe Global Markets Inc.,CBOE,common_stock,USD
+V,Visa Inc.,NYSE,common_stock,USD
+MA,Mastercard Incorporated,NYSE,common_stock,USD
+AXP,American Express Company,NYSE,common_stock,USD
+COF,Capital One Financial Corporation,NYSE,common_stock,USD
+DFS,Discover Financial Services,NYSE,common_stock,USD
+SYF,Synchrony Financial,NYSE,common_stock,USD
+USB,U.S. Bancorp,NYSE,common_stock,USD
+PNC,The PNC Financial Services Group Inc.,NYSE,common_stock,USD
+TFC,Truist Financial Corporation,NYSE,common_stock,USD
+FITB,Fifth Third Bancorp,NASDAQ,common_stock,USD
+KEY,KeyCorp,NYSE,common_stock,USD
+RF,Regions Financial Corporation,NYSE,common_stock,USD
+CFG,Citizens Financial Group Inc.,NYSE,common_stock,USD
+HBAN,Huntington Bancshares Incorporated,NASDAQ,common_stock,USD
+MTB,M&T Bank Corporation,NYSE,common_stock,USD
+ZION,Zions Bancorporation N.A.,NASDAQ,common_stock,USD
+BK,The Bank of New York Mellon Corporation,NYSE,common_stock,USD
+STT,State Street Corporation,NYSE,common_stock,USD
+NTRS,Northern Trust Corporation,NASDAQ,common_stock,USD
+BRK.B,Berkshire Hathaway Inc. Class B,NYSE,common_stock,USD
+PGR,The Progressive Corporation,NYSE,common_stock,USD
+TRV,The Travelers Companies Inc.,NYSE,common_stock,USD
+ALL,The Allstate Corporation,NYSE,common_stock,USD
+CB,Chubb Limited,NYSE,common_stock,USD
+AIG,American International Group Inc.,NYSE,common_stock,USD
+MET,MetLife Inc.,NYSE,common_stock,USD
+PRU,Prudential Financial Inc.,NYSE,common_stock,USD
+AFL,Aflac Incorporated,NYSE,common_stock,USD
+HIG,The Hartford Insurance Group Inc.,NYSE,common_stock,USD
+PFG,Principal Financial Group Inc.,NASDAQ,common_stock,USD
+AMP,Ameriprise Financial Inc.,NYSE,common_stock,USD
+TROW,T. Rowe Price Group Inc.,NASDAQ,common_stock,USD
+BEN,Franklin Resources Inc.,NYSE,common_stock,USD
+IVZ,Invesco Ltd.,NYSE,common_stock,USD
+JHG,Janus Henderson Group plc,NYSE,common_stock,USD
+UNH,UnitedHealth Group Incorporated,NYSE,common_stock,USD
+JNJ,Johnson & Johnson,NYSE,common_stock,USD
+LLY,Eli Lilly and Company,NYSE,common_stock,USD
+ABBV,AbbVie Inc.,NYSE,common_stock,USD
+MRK,Merck & Co. Inc.,NYSE,common_stock,USD
+PFE,Pfizer Inc.,NYSE,common_stock,USD
+BMY,Bristol-Myers Squibb Company,NYSE,common_stock,USD
+AMGN,Amgen Inc.,NASDAQ,common_stock,USD
+GILD,Gilead Sciences Inc.,NASDAQ,common_stock,USD
+VRTX,Vertex Pharmaceuticals Incorporated,NASDAQ,common_stock,USD
+REGN,Regeneron Pharmaceuticals Inc.,NASDAQ,common_stock,USD
+BIIB,Biogen Inc.,NASDAQ,common_stock,USD
+MRNA,Moderna Inc.,NASDAQ,common_stock,USD
+ZTS,Zoetis Inc.,NYSE,common_stock,USD
+TMO,Thermo Fisher Scientific Inc.,NYSE,common_stock,USD
+DHR,Danaher Corporation,NYSE,common_stock,USD
+ABT,Abbott Laboratories,NYSE,common_stock,USD
+SYK,Stryker Corporation,NYSE,common_stock,USD
+BSX,Boston Scientific Corporation,NYSE,common_stock,USD
+MDT,Medtronic plc,NYSE,common_stock,USD
+EW,Edwards Lifesciences Corporation,NYSE,common_stock,USD
+ISRG,Intuitive Surgical Inc.,NASDAQ,common_stock,USD
+BDX,Becton Dickinson and Company,NYSE,common_stock,USD
+BAX,Baxter International Inc.,NYSE,common_stock,USD
+ZBH,Zimmer Biomet Holdings Inc.,NYSE,common_stock,USD
+DXCM,DexCom Inc.,NASDAQ,common_stock,USD
+IDXX,IDEXX Laboratories Inc.,NASDAQ,common_stock,USD
+A,Agilent Technologies Inc.,NYSE,common_stock,USD
+IQV,IQVIA Holdings Inc.,NYSE,common_stock,USD
+MTD,Mettler-Toledo International Inc.,NYSE,common_stock,USD
+WAT,Waters Corporation,NYSE,common_stock,USD
+RMD,ResMed Inc.,NYSE,common_stock,USD
+CI,The Cigna Group,NYSE,common_stock,USD
+ELV,Elevance Health Inc.,NYSE,common_stock,USD
+HUM,Humana Inc.,NYSE,common_stock,USD
+CNC,Centene Corporation,NYSE,common_stock,USD
+MOH,Molina Healthcare Inc.,NYSE,common_stock,USD
+CVS,CVS Health Corporation,NYSE,common_stock,USD
+MCK,McKesson Corporation,NYSE,common_stock,USD
+COR,Cencora Inc.,NYSE,common_stock,USD
+CAH,Cardinal Health Inc.,NYSE,common_stock,USD
+HCA,HCA Healthcare Inc.,NYSE,common_stock,USD
+UHS,Universal Health Services Inc.,NYSE,common_stock,USD
+DVA,DaVita Inc.,NYSE,common_stock,USD
+ALNY,Alnylam Pharmaceuticals Inc.,NASDAQ,common_stock,USD
+INCY,Incyte Corporation,NASDAQ,common_stock,USD
+UTHR,United Therapeutics Corporation,NASDAQ,common_stock,USD
+NBIX,Neurocrine Biosciences Inc.,NASDAQ,common_stock,USD
+EXAS,Exact Sciences Corporation,NASDAQ,common_stock,USD
+ILMN,Illumina Inc.,NASDAQ,common_stock,USD
+AZN,AstraZeneca PLC,NASDAQ,adr,USD
+NVO,Novo Nordisk A/S,NYSE,adr,USD
+NVS,Novartis AG,NYSE,adr,USD
+GSK,GSK plc,NYSE,adr,USD
+SNY,Sanofi,NASDAQ,adr,USD
+WMT,Walmart Inc.,NYSE,common_stock,USD
+COST,Costco Wholesale Corporation,NASDAQ,common_stock,USD
+TGT,Target Corporation,NYSE,common_stock,USD
+HD,The Home Depot Inc.,NYSE,common_stock,USD
+LOW,Lowe's Companies Inc.,NYSE,common_stock,USD
+TJX,The TJX Companies Inc.,NYSE,common_stock,USD
+ROST,Ross Stores Inc.,NASDAQ,common_stock,USD
+BURL,Burlington Stores Inc.,NYSE,common_stock,USD
+DG,Dollar General Corporation,NYSE,common_stock,USD
+DLTR,Dollar Tree Inc.,NASDAQ,common_stock,USD
+KR,The Kroger Co.,NYSE,common_stock,USD
+SYY,Sysco Corporation,NYSE,common_stock,USD
+ORLY,O'Reilly Automotive Inc.,NASDAQ,common_stock,USD
+AZO,AutoZone Inc.,NYSE,common_stock,USD
+AAP,Advance Auto Parts Inc.,NYSE,common_stock,USD
+BBY,Best Buy Co. Inc.,NYSE,common_stock,USD
+ULTA,Ulta Beauty Inc.,NASDAQ,common_stock,USD
+LULU,Lululemon Athletica Inc.,NASDAQ,common_stock,USD
+NKE,NIKE Inc.,NYSE,common_stock,USD
+DECK,Deckers Outdoor Corporation,NYSE,common_stock,USD
+SKX,Skechers U.S.A. Inc.,NYSE,common_stock,USD
+VFC,V.F. Corporation,NYSE,common_stock,USD
+RL,Ralph Lauren Corporation,NYSE,common_stock,USD
+PVH,PVH Corp.,NYSE,common_stock,USD
+TPR,Tapestry Inc.,NYSE,common_stock,USD
+CPRI,Capri Holdings Limited,NYSE,common_stock,USD
+GPS,The Gap Inc.,NYSE,common_stock,USD
+ANF,Abercrombie & Fitch Co.,NYSE,common_stock,USD
+AEO,American Eagle Outfitters Inc.,NYSE,common_stock,USD
+M,Macy's Inc.,NYSE,common_stock,USD
+JWN,Nordstrom Inc.,NYSE,common_stock,USD
+KSS,Kohl's Corporation,NYSE,common_stock,USD
+W,Wayfair Inc.,NYSE,common_stock,USD
+CHWY,Chewy Inc.,NYSE,common_stock,USD
+ETSY,Etsy Inc.,NASDAQ,common_stock,USD
+EBAY,eBay Inc.,NASDAQ,common_stock,USD
+MCD,McDonald's Corporation,NYSE,common_stock,USD
+SBUX,Starbucks Corporation,NASDAQ,common_stock,USD
+CMG,Chipotle Mexican Grill Inc.,NYSE,common_stock,USD
+YUM,Yum! Brands Inc.,NYSE,common_stock,USD
+QSR,Restaurant Brands International Inc.,NYSE,common_stock,USD
+DRI,Darden Restaurants Inc.,NYSE,common_stock,USD
+DPZ,Domino's Pizza Inc.,NASDAQ,common_stock,USD
+WING,Wingstop Inc.,NASDAQ,common_stock,USD
+TXRH,Texas Roadhouse Inc.,NASDAQ,common_stock,USD
+KO,The Coca-Cola Company,NYSE,common_stock,USD
+PEP,PepsiCo Inc.,NASDAQ,common_stock,USD
+KDP,Keurig Dr Pepper Inc.,NASDAQ,common_stock,USD
+MNST,Monster Beverage Corporation,NASDAQ,common_stock,USD
+CELH,Celsius Holdings Inc.,NASDAQ,common_stock,USD
+STZ,Constellation Brands Inc.,NYSE,common_stock,USD
+BF.B,Brown-Forman Corporation Class B,NYSE,common_stock,USD
+TAP,Molson Coors Beverage Company,NYSE,common_stock,USD
+PG,The Procter & Gamble Company,NYSE,common_stock,USD
+CL,Colgate-Palmolive Company,NYSE,common_stock,USD
+KMB,Kimberly-Clark Corporation,NASDAQ,common_stock,USD
+CHD,Church & Dwight Co. Inc.,NYSE,common_stock,USD
+CLX,The Clorox Company,NYSE,common_stock,USD
+EL,The Estee Lauder Companies Inc.,NYSE,common_stock,USD
+GIS,General Mills Inc.,NYSE,common_stock,USD
+K,Kellanova,NYSE,common_stock,USD
+HSY,The Hershey Company,NYSE,common_stock,USD
+MDLZ,Mondelez International Inc.,NASDAQ,common_stock,USD
+CAG,Conagra Brands Inc.,NYSE,common_stock,USD
+CPB,The Campbell's Company,NYSE,common_stock,USD
+SJM,The J. M. Smucker Company,NYSE,common_stock,USD
+HRL,Hormel Foods Corporation,NYSE,common_stock,USD
+TSN,Tyson Foods Inc.,NYSE,common_stock,USD
+ADM,Archer-Daniels-Midland Company,NYSE,common_stock,USD
+MO,Altria Group Inc.,NYSE,common_stock,USD
+PM,Philip Morris International Inc.,NYSE,common_stock,USD
+XOM,Exxon Mobil Corporation,NYSE,common_stock,USD
+CVX,Chevron Corporation,NYSE,common_stock,USD
+COP,ConocoPhillips,NYSE,common_stock,USD
+EOG,EOG Resources Inc.,NYSE,common_stock,USD
+PSX,Phillips 66,NYSE,common_stock,USD
+VLO,Valero Energy Corporation,NYSE,common_stock,USD
+MPC,Marathon Petroleum Corporation,NYSE,common_stock,USD
+OXY,Occidental Petroleum Corporation,NYSE,common_stock,USD
+HES,Hess Corporation,NYSE,common_stock,USD
+DVN,Devon Energy Corporation,NYSE,common_stock,USD
+FANG,Diamondback Energy Inc.,NASDAQ,common_stock,USD
+APA,APA Corporation,NASDAQ,common_stock,USD
+HAL,Halliburton Company,NYSE,common_stock,USD
+SLB,Schlumberger Limited,NYSE,common_stock,USD
+BKR,Baker Hughes Company,NASDAQ,common_stock,USD
+KMI,Kinder Morgan Inc.,NYSE,common_stock,USD
+WMB,The Williams Companies Inc.,NYSE,common_stock,USD
+OKE,ONEOK Inc.,NYSE,common_stock,USD
+TRGP,Targa Resources Corp.,NYSE,common_stock,USD
+LNG,Cheniere Energy Inc.,NYSE,common_stock,USD
+NEE,NextEra Energy Inc.,NYSE,common_stock,USD
+DUK,Duke Energy Corporation,NYSE,common_stock,USD
+SO,The Southern Company,NYSE,common_stock,USD
+D,Dominion Energy Inc.,NYSE,common_stock,USD
+AEP,American Electric Power Company Inc.,NASDAQ,common_stock,USD
+EXC,Exelon Corporation,NASDAQ,common_stock,USD
+XEL,Xcel Energy Inc.,NASDAQ,common_stock,USD
+SRE,Sempra,NYSE,common_stock,USD
+PEG,Public Service Enterprise Group Incorporated,NYSE,common_stock,USD
+ED,Consolidated Edison Inc.,NYSE,common_stock,USD
+WEC,WEC Energy Group Inc.,NYSE,common_stock,USD
+ES,Eversource Energy,NYSE,common_stock,USD
+AEE,Ameren Corporation,NYSE,common_stock,USD
+DTE,DTE Energy Company,NYSE,common_stock,USD
+PPL,PPL Corporation,NYSE,common_stock,USD
+FE,FirstEnergy Corp.,NYSE,common_stock,USD
+CNP,CenterPoint Energy Inc.,NYSE,common_stock,USD
+CMS,CMS Energy Corporation,NYSE,common_stock,USD
+AES,The AES Corporation,NYSE,common_stock,USD
+VST,Vistra Corp.,NYSE,common_stock,USD
+CEG,Constellation Energy Corporation,NASDAQ,common_stock,USD
+BA,The Boeing Company,NYSE,common_stock,USD
+LMT,Lockheed Martin Corporation,NYSE,common_stock,USD
+RTX,RTX Corporation,NYSE,common_stock,USD
+NOC,Northrop Grumman Corporation,NYSE,common_stock,USD
+GD,General Dynamics Corporation,NYSE,common_stock,USD
+LHX,L3Harris Technologies Inc.,NYSE,common_stock,USD
+HII,Huntington Ingalls Industries Inc.,NYSE,common_stock,USD
+TXT,Textron Inc.,NYSE,common_stock,USD
+HWM,Howmet Aerospace Inc.,NYSE,common_stock,USD
+TDG,TransDigm Group Incorporated,NYSE,common_stock,USD
+HEI,HEICO Corporation,NYSE,common_stock,USD
+GE,GE Aerospace,NYSE,common_stock,USD
+HON,Honeywell International Inc.,NASDAQ,common_stock,USD
+MMM,3M Company,NYSE,common_stock,USD
+CAT,Caterpillar Inc.,NYSE,common_stock,USD
+DE,Deere & Company,NYSE,common_stock,USD
+CMI,Cummins Inc.,NYSE,common_stock,USD
+PCAR,PACCAR Inc,NASDAQ,common_stock,USD
+ETN,Eaton Corporation plc,NYSE,common_stock,USD
+EMR,Emerson Electric Co.,NYSE,common_stock,USD
+ITW,Illinois Tool Works Inc.,NYSE,common_stock,USD
+PH,Parker-Hannifin Corporation,NYSE,common_stock,USD
+ROK,Rockwell Automation Inc.,NYSE,common_stock,USD
+DOV,Dover Corporation,NYSE,common_stock,USD
+IR,Ingersoll Rand Inc.,NYSE,common_stock,USD
+XYL,Xylem Inc.,NYSE,common_stock,USD
+FTV,Fortive Corporation,NYSE,common_stock,USD
+AME,AMETEK Inc.,NYSE,common_stock,USD
+SWK,Stanley Black & Decker Inc.,NYSE,common_stock,USD
+GWW,W.W. Grainger Inc.,NYSE,common_stock,USD
+FAST,Fastenal Company,NASDAQ,common_stock,USD
+URI,United Rentals Inc.,NYSE,common_stock,USD
+PWR,Quanta Services Inc.,NYSE,common_stock,USD
+EME,EMCOR Group Inc.,NYSE,common_stock,USD
+J,Jacobs Solutions Inc.,NYSE,common_stock,USD
+ACM,AECOM,NYSE,common_stock,USD
+MAS,Masco Corporation,NYSE,common_stock,USD
+BLDR,Builders FirstSource Inc.,NYSE,common_stock,USD
+UPS,United Parcel Service Inc.,NYSE,common_stock,USD
+FDX,FedEx Corporation,NYSE,common_stock,USD
+UNP,Union Pacific Corporation,NYSE,common_stock,USD
+CSX,CSX Corporation,NASDAQ,common_stock,USD
+NSC,Norfolk Southern Corporation,NYSE,common_stock,USD
+ODFL,Old Dominion Freight Line Inc.,NASDAQ,common_stock,USD
+JBHT,J.B. Hunt Transport Services Inc.,NASDAQ,common_stock,USD
+CHRW,C.H. Robinson Worldwide Inc.,NASDAQ,common_stock,USD
+EXPD,Expeditors International of Washington Inc.,NASDAQ,common_stock,USD
+DAL,Delta Air Lines Inc.,NYSE,common_stock,USD
+UAL,United Airlines Holdings Inc.,NASDAQ,common_stock,USD
+AAL,American Airlines Group Inc.,NASDAQ,common_stock,USD
+LUV,Southwest Airlines Co.,NYSE,common_stock,USD
+ALK,Alaska Air Group Inc.,NYSE,common_stock,USD
+CCL,Carnival Corporation,NYSE,common_stock,USD
+RCL,Royal Caribbean Cruises Ltd.,NYSE,common_stock,USD
+NCLH,Norwegian Cruise Line Holdings Ltd.,NYSE,common_stock,USD
+MAR,Marriott International Inc.,NASDAQ,common_stock,USD
+HLT,Hilton Worldwide Holdings Inc.,NYSE,common_stock,USD
+H,Hyatt Hotels Corporation,NYSE,common_stock,USD
+WH,Wyndham Hotels & Resorts Inc.,NYSE,common_stock,USD
+LVS,Las Vegas Sands Corp.,NYSE,common_stock,USD
+WYNN,Wynn Resorts Limited,NASDAQ,common_stock,USD
+MGM,MGM Resorts International,NYSE,common_stock,USD
+CZR,Caesars Entertainment Inc.,NASDAQ,common_stock,USD
+DKNG,DraftKings Inc.,NASDAQ,common_stock,USD
+EXPE,Expedia Group Inc.,NASDAQ,common_stock,USD
+BKNG,Booking Holdings Inc.,NASDAQ,common_stock,USD
+F,Ford Motor Company,NYSE,common_stock,USD
+GM,General Motors Company,NYSE,common_stock,USD
+RIVN,Rivian Automotive Inc.,NASDAQ,common_stock,USD
+LCID,Lucid Group Inc.,NASDAQ,common_stock,USD
+HMC,Honda Motor Co. Ltd.,NYSE,adr,USD
+TM,Toyota Motor Corporation,NYSE,adr,USD
+STLA,Stellantis N.V.,NYSE,common_stock,USD
+APTV,Aptiv PLC,NYSE,common_stock,USD
+BWA,BorgWarner Inc.,NYSE,common_stock,USD
+LEA,Lear Corporation,NYSE,common_stock,USD
+GT,The Goodyear Tire & Rubber Company,NASDAQ,common_stock,USD
+HOG,Harley-Davidson Inc.,NYSE,common_stock,USD
+LIN,Linde plc,NASDAQ,common_stock,USD
+APD,Air Products and Chemicals Inc.,NYSE,common_stock,USD
+SHW,The Sherwin-Williams Company,NYSE,common_stock,USD
+ECL,Ecolab Inc.,NYSE,common_stock,USD
+DD,DuPont de Nemours Inc.,NYSE,common_stock,USD
+DOW,Dow Inc.,NYSE,common_stock,USD
+LYB,LyondellBasell Industries N.V.,NYSE,common_stock,USD
+PPG,PPG Industries Inc.,NYSE,common_stock,USD
+NUE,Nucor Corporation,NYSE,common_stock,USD
+STLD,Steel Dynamics Inc.,NASDAQ,common_stock,USD
+CLF,Cleveland-Cliffs Inc.,NYSE,common_stock,USD
+X,United States Steel Corporation,NYSE,common_stock,USD
+FCX,Freeport-McMoRan Inc.,NYSE,common_stock,USD
+NEM,Newmont Corporation,NYSE,common_stock,USD
+AA,Alcoa Corporation,NYSE,common_stock,USD
+MOS,The Mosaic Company,NYSE,common_stock,USD
+CF,CF Industries Holdings Inc.,NYSE,common_stock,USD
+IP,International Paper Company,NYSE,common_stock,USD
+PKG,Packaging Corporation of America,NYSE,common_stock,USD
+BALL,Ball Corporation,NYSE,common_stock,USD
+AMCR,Amcor plc,NYSE,common_stock,USD
+VMC,Vulcan Materials Company,NYSE,common_stock,USD
+MLM,Martin Marietta Materials Inc.,NYSE,common_stock,USD
+DHI,D.R. Horton Inc.,NYSE,common_stock,USD
+LEN,Lennar Corporation,NYSE,common_stock,USD
+PHM,PulteGroup Inc.,NYSE,common_stock,USD
+NVR,NVR Inc.,NYSE,common_stock,USD
+TOL,Toll Brothers Inc.,NYSE,common_stock,USD
+WM,Waste Management Inc.,NYSE,common_stock,USD
+RSG,Republic Services Inc.,NYSE,common_stock,USD
+WCN,Waste Connections Inc.,NYSE,common_stock,USD
+DIS,The Walt Disney Company,NYSE,common_stock,USD
+NFLX,Netflix Inc.,NASDAQ,common_stock,USD
+CMCSA,Comcast Corporation,NASDAQ,common_stock,USD
+WBD,Warner Bros. Discovery Inc.,NASDAQ,common_stock,USD
+PARA,Paramount Global,NASDAQ,common_stock,USD
+FOXA,Fox Corporation Class A,NASDAQ,common_stock,USD
+NWSA,News Corporation Class A,NASDAQ,common_stock,USD
+LYV,Live Nation Entertainment Inc.,NYSE,common_stock,USD
+EA,Electronic Arts Inc.,NASDAQ,common_stock,USD
+TTWO,Take-Two Interactive Software Inc.,NASDAQ,common_stock,USD
+MTCH,Match Group Inc.,NASDAQ,common_stock,USD
+PINS,Pinterest Inc.,NYSE,common_stock,USD
+SNAP,Snap Inc.,NYSE,common_stock,USD
+T,AT&T Inc.,NYSE,common_stock,USD
+VZ,Verizon Communications Inc.,NYSE,common_stock,USD
+TMUS,T-Mobile US Inc.,NASDAQ,common_stock,USD
+CHTR,Charter Communications Inc.,NASDAQ,common_stock,USD
+OMC,Omnicom Group Inc.,NYSE,common_stock,USD
+IPG,The Interpublic Group of Companies Inc.,NYSE,common_stock,USD
+PLD,Prologis Inc.,NYSE,reit,USD
+AMT,American Tower Corporation,NYSE,reit,USD
+CCI,Crown Castle Inc.,NYSE,reit,USD
+SBAC,SBA Communications Corporation,NASDAQ,reit,USD
+EQIX,Equinix Inc.,NASDAQ,reit,USD
+DLR,Digital Realty Trust Inc.,NYSE,reit,USD
+PSA,Public Storage,NYSE,reit,USD
+EXR,Extra Space Storage Inc.,NYSE,reit,USD
+SPG,Simon Property Group Inc.,NYSE,reit,USD
+O,Realty Income Corporation,NYSE,reit,USD
+VICI,VICI Properties Inc.,NYSE,reit,USD
+WELL,Welltower Inc.,NYSE,reit,USD
+VTR,Ventas Inc.,NYSE,reit,USD
+AVB,AvalonBay Communities Inc.,NYSE,reit,USD
+EQR,Equity Residential,NYSE,reit,USD
+MAA,Mid-America Apartment Communities Inc.,NYSE,reit,USD
+INVH,Invitation Homes Inc.,NYSE,reit,USD
+ARE,Alexandria Real Estate Equities Inc.,NYSE,reit,USD
+BXP,BXP Inc.,NYSE,reit,USD
+HST,Host Hotels & Resorts Inc.,NASDAQ,reit,USD
+IRM,Iron Mountain Incorporated,NYSE,reit,USD
+WY,Weyerhaeuser Company,NYSE,reit,USD
+CBRE,CBRE Group Inc.,NYSE,common_stock,USD
+ADP,Automatic Data Processing Inc.,NASDAQ,common_stock,USD
+PAYX,Paychex Inc.,NASDAQ,common_stock,USD
+PAYC,Paycom Software Inc.,NYSE,common_stock,USD
+CDW,CDW Corporation,NASDAQ,common_stock,USD
+VRSK,Verisk Analytics Inc.,NASDAQ,common_stock,USD
+EFX,Equifax Inc.,NYSE,common_stock,USD
+TRU,TransUnion,NYSE,common_stock,USD
+CTAS,Cintas Corporation,NASDAQ,common_stock,USD
+RHI,Robert Half Inc.,NYSE,common_stock,USD
+SPY,SPDR S&P 500 ETF Trust,NYSEARCA,etf,USD
+VOO,Vanguard S&P 500 ETF,NYSEARCA,etf,USD
+IVV,iShares Core S&P 500 ETF,NYSEARCA,etf,USD
+QQQ,Invesco QQQ Trust,NASDAQ,etf,USD
+DIA,SPDR Dow Jones Industrial Average ETF Trust,NYSEARCA,etf,USD
+IWM,iShares Russell 2000 ETF,NYSEARCA,etf,USD
+VTI,Vanguard Total Stock Market ETF,NYSEARCA,etf,USD
+VT,Vanguard Total World Stock ETF,NYSEARCA,etf,USD
+VEA,Vanguard FTSE Developed Markets ETF,NYSEARCA,etf,USD
+VWO,Vanguard FTSE Emerging Markets ETF,NYSEARCA,etf,USD
+EFA,iShares MSCI EAFE ETF,NYSEARCA,etf,USD
+EEM,iShares MSCI Emerging Markets ETF,NYSEARCA,etf,USD
+VUG,Vanguard Growth ETF,NYSEARCA,etf,USD
+VTV,Vanguard Value ETF,NYSEARCA,etf,USD
+VYM,Vanguard High Dividend Yield ETF,NYSEARCA,etf,USD
+SCHD,Schwab U.S. Dividend Equity ETF,NYSEARCA,etf,USD
+DVY,iShares Select Dividend ETF,NASDAQ,etf,USD
+RSP,Invesco S&P 500 Equal Weight ETF,NYSEARCA,etf,USD
+MDY,SPDR S&P MidCap 400 ETF Trust,NYSEARCA,etf,USD
+XLK,Technology Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLF,Financial Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLE,Energy Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLV,Health Care Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLI,Industrial Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLY,Consumer Discretionary Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLP,Consumer Staples Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLU,Utilities Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLB,Materials Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLRE,Real Estate Select Sector SPDR Fund,NYSEARCA,etf,USD
+XLC,Communication Services Select Sector SPDR Fund,NYSEARCA,etf,USD
+SMH,VanEck Semiconductor ETF,NASDAQ,etf,USD
+SOXX,iShares Semiconductor ETF,NASDAQ,etf,USD
+IBB,iShares Biotechnology ETF,NASDAQ,etf,USD
+XBI,SPDR S&P Biotech ETF,NYSEARCA,etf,USD
+ITB,iShares U.S. Home Construction ETF,NYSEARCA,etf,USD
+XRT,SPDR S&P Retail ETF,NYSEARCA,etf,USD
+XOP,SPDR S&P Oil & Gas Exploration & Production ETF,NYSEARCA,etf,USD
+KRE,SPDR S&P Regional Banking ETF,NYSEARCA,etf,USD
+JETS,U.S. Global Jets ETF,NYSEARCA,etf,USD
+ARKK,ARK Innovation ETF,NYSEARCA,etf,USD
+TLT,iShares 20+ Year Treasury Bond ETF,NASDAQ,etf,USD
+IEF,iShares 7-10 Year Treasury Bond ETF,NASDAQ,etf,USD
+SHY,iShares 1-3 Year Treasury Bond ETF,NASDAQ,etf,USD
+AGG,iShares Core U.S. Aggregate Bond ETF,NYSEARCA,etf,USD
+BND,Vanguard Total Bond Market ETF,NASDAQ,etf,USD
+LQD,iShares iBoxx $ Investment Grade Corporate Bond ETF,NYSEARCA,etf,USD
+HYG,iShares iBoxx $ High Yield Corporate Bond ETF,NYSEARCA,etf,USD
+TIP,iShares TIPS Bond ETF,NYSEARCA,etf,USD
+GLD,SPDR Gold Shares,NYSEARCA,etf,USD
+IAU,iShares Gold Trust,NYSEARCA,etf,USD
+SLV,iShares Silver Trust,NYSEARCA,etf,USD
+USO,United States Oil Fund LP,NYSEARCA,etf,USD
+UNG,United States Natural Gas Fund LP,NYSEARCA,etf,USD
+DBC,Invesco DB Commodity Index Tracking Fund,NYSEARCA,etf,USD
+VNQ,Vanguard Real Estate ETF,NYSEARCA,etf,USD

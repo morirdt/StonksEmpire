@@ -42,7 +42,10 @@ async def test_ready_returns_200_when_database_is_up(
     response = await client.get("/ready")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "checks": {"database": True}}
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["checks"]["database"] is True
+    assert body["degraded"] == []
 
 
 async def test_ready_returns_503_when_database_is_down(
@@ -68,3 +71,47 @@ async def test_correlation_id_is_echoed(client: AsyncClient) -> None:
 async def test_correlation_id_is_generated_when_absent(client: AsyncClient) -> None:
     response = await client.get("/health")
     assert response.headers.get("X-Request-ID")
+
+
+async def test_a_degraded_provider_is_reported_but_stays_ready(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A third party having a bad afternoon must not take the app out of rotation.
+
+    Getting this backwards is how one provider outage becomes a full outage: the
+    orchestrator pulls every pod because a dependency the app can serve without
+    is failing.
+    """
+
+    async def ok() -> bool:
+        return True
+
+    monkeypatch.setattr(health_module, "check_database", ok)
+    monkeypatch.setattr(health_module, "market_data_is_healthy", lambda: False)
+
+    response = await client.get("/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["checks"]["market_data"] is False
+    assert body["degraded"] == ["market_data"]
+
+
+async def test_a_lost_database_is_still_fatal(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The soft-failure path must not have made every check optional."""
+
+    async def down() -> bool:
+        return False
+
+    monkeypatch.setattr(health_module, "check_database", down)
+    monkeypatch.setattr(health_module, "market_data_is_healthy", lambda: True)
+
+    response = await client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
