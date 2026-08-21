@@ -13,7 +13,7 @@ spec because agents trust it.
 |-------|-------|--------|
 | 0 | Scaffold, tooling, Docker, Alembic, CI | ✅ complete |
 | 1 | Auth & users | ✅ complete — [spec](phases/phase-1-auth.md) |
-| 2 | Market data foundation + watchlists | ⬜ |
+| 2 | Market data foundation + watchlists | ⬜ next — [spec](phases/phase-2-market-data.md) |
 | 3 | Analysis & charting | ⬜ |
 | 4 | Screeners | ⬜ |
 | 5 | Alerts, background jobs, real-time | ⬜ |
@@ -52,10 +52,17 @@ dependency list, which the spec's table had missed.
 
 ## Phase 2 — Market data + watchlists
 
+**Spec: [`docs/phases/phase-2-market-data.md`](phases/phase-2-market-data.md)**
+
 `symbols`, `daily_bars`, `daily_indicators`, `latest_quotes` · `MarketDataProvider`
 protocol with Finnhub, Tiingo, and Fake implementations · rate limiting, retry,
 circuit breaker · universe seed and EOD backfill scripts · server-side indicator
 computation · watchlist CRUD and quote grid.
+
+> Three loosely coupled pieces — provider layer, data layer, feature — and only
+> the last is user-visible. The `Fake` provider is what lets the other two be
+> built and tested without a network or an API key, so it is not a testing
+> afterthought: it is the default.
 
 ## Phase 3 — Analysis & charting
 
