@@ -14,7 +14,7 @@ spec because agents trust it.
 | 0 | Scaffold, tooling, Docker, Alembic, CI | ✅ complete |
 | 1 | Auth & users | ✅ complete — [spec](phases/phase-1-auth.md) |
 | 2 | Market data foundation + watchlists | ✅ complete — [spec](phases/phase-2-market-data.md) |
-| 3 | Analysis & charting | ⬜ next |
+| 3 | Analysis & charting | ⬜ next — [spec](phases/phase-3-charting.md) |
 | 4 | Screeners | ⬜ |
 | 5 | Alerts, background jobs, real-time | ⬜ |
 | 6 | Trading log & performance insights | ⬜ |
@@ -86,12 +86,29 @@ Three things worth carrying forward:
 
 ## Phase 3 — Analysis & charting
 
+**Spec: [`docs/phases/phase-3-charting.md`](phases/phase-3-charting.md)**
+
 Symbol detail page · candlestick + volume + indicator overlays · bars and
-indicators endpoints.
+indicators endpoints · `user_chart_preferences`.
 
 > Ordered ahead of screeners deliberately: charting consumes the Phase 2 data
 > directly and needs no new backend concepts, while screeners depend on a
 > complete, reliably-refreshed universe.
+
+`lightweight-charts` over ECharts, visx, and Recharts: purpose-built for this
+one chart, ~45kb, and the alternatives all mean building a candlestick series by
+hand or paying for a superset nothing here needs. The costs are real and
+accepted — it is imperative, it renders to canvas (so tests cover data shaping
+and controls, never pixels), and every colour must be handed to it from the
+theme.
+
+The chart's colours were **computed, not chosen**. Running the `dataviz`
+validator against this project's own surfaces turned up something worth knowing:
+the existing `profit`/`loss` tokens sit at **ΔE 4.4 under deuteranopia**, so
+red-green candles alone are unreadable for a substantial minority. The spec
+therefore requires fill as a second encoding — hollow up candles, filled down
+candles — rather than repainting the palette. The Phase 2 quote grid is
+unaffected: it already signs its numbers, which does the same job.
 
 ## Phase 4 — Screeners
 
