@@ -21,11 +21,12 @@ from app.core.config import get_settings
 from app.core.exceptions import ExternalServiceError, NotFoundError
 from app.integrations.market_data import get_market_data_provider
 from app.integrations.market_data.base import MarketDataProvider, Quote
-from app.models.market_data import LatestQuote
+from app.models.market_data import DailyBar, DailyIndicator, LatestQuote
 from app.models.symbol import Symbol
 from app.repositories.bar_repository import BarRepository
 from app.repositories.quote_repository import QuoteRepository
 from app.repositories.symbol_repository import SymbolRepository
+from app.services.chart_service import ChartWindow
 from app.services.indicator_service import compute_indicators
 
 logger = structlog.get_logger(__name__)
@@ -54,6 +55,42 @@ class MarketDataService:
         if symbol is None:
             raise NotFoundError(f"Unknown ticker {ticker.upper()!r}.")
         return symbol
+
+    # -------------------------------------------------------------------- chart
+
+    async def get_bars(self, ticker: str, window: ChartWindow) -> tuple[Symbol, list[DailyBar]]:
+        """OHLCV for one symbol over a resolved window, oldest first.
+
+        An unknown ticker is a 404 here, not an empty list: "no such symbol" and
+        "no history yet for this symbol" are different answers, and a chart has
+        a different empty state for each.
+        """
+        symbol = await self.get_symbol(ticker)
+        bars = await self._bars.get_range(
+            symbol.id,
+            start=window.start,
+            end=window.end,
+            limit=window.limit,
+        )
+        return symbol, bars
+
+    async def get_indicators(
+        self, ticker: str, window: ChartWindow
+    ) -> tuple[Symbol, list[DailyIndicator]]:
+        """The same window as ``get_bars``, in the same order.
+
+        The chart aligns the two positionally, so this must truncate from the
+        same end and sort the same way. It does, because both go through the one
+        repository that owns that ordering.
+        """
+        symbol = await self.get_symbol(ticker)
+        indicators = await self._bars.get_indicators(
+            symbol.id,
+            start=window.start,
+            end=window.end,
+            limit=window.limit,
+        )
+        return symbol, indicators
 
     # ------------------------------------------------------------------- quotes
 

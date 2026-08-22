@@ -17,6 +17,18 @@ export const queryKeys = {
     all: () => ['symbols'] as const,
     search: (query: string, limit: number) => ['symbols', 'search', query, limit] as const,
     detail: (ticker: string) => ['symbols', 'detail', ticker] as const,
+    // Keyed by ticker *and* resolved range: the same symbol at 1M and at 1Y are
+    // different windows, and sharing one entry would serve whichever loaded
+    // last. Bars and indicators are separate keys because they are separate
+    // requests — invalidating one must not refetch the other.
+    bars: (ticker: string, range: string) => ['symbols', 'bars', ticker, range] as const,
+    indicators: (ticker: string, range: string) =>
+      ['symbols', 'indicators', ticker, range] as const,
+  },
+  chart: {
+    all: () => ['chart'] as const,
+    // One row per user, global across symbols — so no ticker in the key.
+    preferences: () => ['chart', 'preferences'] as const,
   },
   quotes: {
     all: () => ['quotes'] as const,

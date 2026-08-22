@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
+import { Link as RouterLink } from 'react-router';
 import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -106,9 +108,17 @@ export function QuoteGrid({
           <Box
             sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: 1 }}
           >
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            {/* A link, not an import: the detail page is a symbols-feature
+                page and features may not import each other. */}
+            <Link
+              component={RouterLink}
+              to={`/symbols/${params.row.ticker}`}
+              variant="body2"
+              underline="hover"
+              sx={{ fontWeight: 700, color: 'text.primary' }}
+            >
               {params.row.ticker}
-            </Typography>
+            </Link>
             <Typography variant="caption" color="text.secondary" noWrap>
               {params.row.name}
             </Typography>

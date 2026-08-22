@@ -101,6 +101,29 @@ class IndicatorResponse(BaseModel):
     volume_sma_20: Decimal | None = None
 
 
+class BarsResponse(BaseModel):
+    """One symbol's OHLCV window, oldest first.
+
+    Carries the ticker so a client holding several in flight can tell them
+    apart without threading the request parameters back through.
+    """
+
+    ticker: str
+    bars: list[BarResponse]
+
+
+class IndicatorsResponse(BaseModel):
+    """The same window as ``BarsResponse``, same order, aligned by trade date.
+
+    Two responses rather than one combined payload: they are two parallel round
+    trips rather than an N+1, and they stay independently useful — Phase 4 wants
+    indicators without bars, and an export wants bars without indicators.
+    """
+
+    ticker: str
+    indicators: list[IndicatorResponse]
+
+
 class SymbolSearchResponse(BaseModel):
     items: list[SymbolResponse]
 

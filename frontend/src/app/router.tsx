@@ -4,6 +4,7 @@ import { NotFoundPage } from '@/components/NotFoundPage';
 import { AuthGuard } from '@/features/auth/components/AuthGuard';
 import { LoginPage } from '@/features/auth/routes/LoginPage';
 import { RegisterPage } from '@/features/auth/routes/RegisterPage';
+import { SymbolDetailPage } from '@/features/symbols/routes/SymbolDetailPage';
 import { DashboardPage } from '@/features/system/routes/DashboardPage';
 import { WatchlistsPage } from '@/features/watchlists/routes/WatchlistsPage';
 
@@ -26,6 +27,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <DashboardPage /> },
           { path: 'watchlists', element: <WatchlistsPage /> },
+          { path: 'symbols/:ticker', element: <SymbolDetailPage /> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

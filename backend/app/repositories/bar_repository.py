@@ -183,12 +183,25 @@ class BarRepository:
         *,
         start: date | None = None,
         end: date | None = None,
+        limit: int | None = None,
     ) -> list[DailyIndicator]:
+        """Indicator rows for one symbol, oldest first.
+
+        ``limit`` takes the most recent N and mirrors ``get_range`` exactly.
+        That symmetry is load-bearing: the chart aligns bars and indicators
+        positionally, so the two queries have to truncate from the same end.
+        """
         query = select(DailyIndicator).where(DailyIndicator.symbol_id == symbol_id)
         if start is not None:
             query = query.where(DailyIndicator.trade_date >= start)
         if end is not None:
             query = query.where(DailyIndicator.trade_date <= end)
+
+        if limit is not None:
+            query = query.order_by(DailyIndicator.trade_date.desc()).limit(limit)
+            result = await self._session.execute(query)
+            return sorted(result.scalars(), key=lambda row: row.trade_date)
+
         result = await self._session.execute(query.order_by(DailyIndicator.trade_date))
         return list(result.scalars())
 

@@ -1,10 +1,24 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as ApiClientModule from '@/lib/api/client';
 import { ApiError } from '@/lib/api/client';
 import { renderWithProviders } from '@/test/utils';
 import { WatchlistsPage } from './WatchlistsPage';
+
+/**
+ * The grid links each ticker to its detail page, so the page needs a router
+ * even though nothing here navigates. Without one every render throws on a
+ * null router context.
+ */
+function renderPage() {
+  return renderWithProviders(
+    <MemoryRouter>
+      <WatchlistsPage />
+    </MemoryRouter>,
+  );
+}
 
 const { apiGet, apiPost, apiPatch, apiDelete } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -87,7 +101,7 @@ describe('WatchlistsPage', () => {
   it('tells a new user what to do instead of showing an empty table', async () => {
     stubGet([], []);
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
 
     expect(await screen.findByText('No watchlists yet')).toBeInTheDocument();
     expect(
@@ -98,7 +112,7 @@ describe('WatchlistsPage', () => {
   it('renders a row per symbol with its price', async () => {
     stubGet([WATCHLIST], [row('AAPL', 'Apple Inc.', '123.40', '1.50', 0)]);
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
 
     expect(await screen.findByText('AAPL')).toBeInTheDocument();
     expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
@@ -116,7 +130,7 @@ describe('WatchlistsPage', () => {
       ],
     );
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
 
     expect(await screen.findByText('+1.50')).toBeInTheDocument();
     expect(screen.getByText('-2.25')).toBeInTheDocument();
@@ -136,7 +150,7 @@ describe('WatchlistsPage', () => {
       }),
     );
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
 
     expect(await screen.findByText('boom')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
@@ -151,7 +165,7 @@ describe('WatchlistsPage', () => {
       ],
     );
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
 
     expect(await screen.findByRole('button', { name: 'Move AAPL up' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Move MSFT down' })).toBeDisabled();
@@ -168,7 +182,7 @@ describe('WatchlistsPage', () => {
     );
     apiPatch.mockResolvedValue({ data: [] });
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Move AAPL down' }));
 
     await waitFor(() => expect(apiPatch).toHaveBeenCalled());
@@ -182,7 +196,7 @@ describe('WatchlistsPage', () => {
     stubGet([WATCHLIST], [row('AAPL', 'Apple Inc.', '123.40', '1.50', 0)]);
     apiDelete.mockResolvedValue({ data: null });
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Remove AAPL' }));
 
     await waitFor(() => expect(apiDelete).toHaveBeenCalled());
@@ -197,7 +211,7 @@ describe('WatchlistsPage', () => {
   it('shows an empty grid with guidance when the list has no symbols', async () => {
     stubGet([{ ...WATCHLIST, item_count: 0 }], []);
 
-    renderWithProviders(<WatchlistsPage />);
+    renderPage();
 
     expect(await screen.findByText(/no symbols yet/i)).toBeInTheDocument();
   });

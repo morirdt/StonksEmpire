@@ -89,6 +89,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/chart-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your chart preferences
+         * @description Defaults, not a 404, when nothing has ever been saved.
+         *
+         *     A client that has to special-case "no preferences yet" will get it wrong on
+         *     first load, and there is no meaningful difference between "unset" and "set
+         *     to the defaults".
+         */
+        get: operations["chart_get_chart_preferences"];
+        /**
+         * Replace your chart preferences
+         * @description Full replacement, not a patch. A second PUT replaces rather than merges.
+         */
+        put: operations["chart_put_chart_preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/meta": {
         parameters: {
             query?: never;
@@ -157,6 +185,49 @@ export interface paths {
         };
         /** Get one symbol */
         get: operations["market-data_get_symbol"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/symbols/{ticker}/bars": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily bars for one symbol
+         * @description OHLCV, oldest first. Unknown ticker is 404; range plus start/end is 422.
+         */
+        get: operations["market-data_get_bars"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/symbols/{ticker}/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Computed indicators for one symbol
+         * @description The same window as the bars endpoint, aligned by ``trade_date``.
+         *
+         *     Nulls are real: a 200-day average has no value for its first 199 bars, and
+         *     the chart must draw a gap there rather than a line to zero.
+         */
+        get: operations["market-data_get_indicators"];
         put?: never;
         post?: never;
         delete?: never;
@@ -320,6 +391,81 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BarResponse */
+        BarResponse: {
+            /** Close */
+            close: string;
+            /** High */
+            high: string;
+            /** Is Adjusted */
+            is_adjusted: boolean;
+            /** Low */
+            low: string;
+            /** Open */
+            open: string;
+            /**
+             * Trade Date
+             * Format: date
+             */
+            trade_date: string;
+            /** Volume */
+            volume: number;
+        };
+        /**
+         * BarsResponse
+         * @description One symbol's OHLCV window, oldest first.
+         *
+         *     Carries the ticker so a client holding several in flight can tell them
+         *     apart without threading the request parameters back through.
+         */
+        BarsResponse: {
+            /** Bars */
+            bars: components["schemas"]["BarResponse"][];
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * ChartPreferencesRequest
+         * @description A full replacement, not a patch — every field is required.
+         *
+         *     A PATCH shape would need a way to say "no overlays at all" that is distinct
+         *     from "leave them alone", and `null` versus `[]` is exactly the distinction
+         *     clients get wrong.
+         */
+        ChartPreferencesRequest: {
+            /** Active Oscillators */
+            active_oscillators?: components["schemas"]["Oscillator"][];
+            /** Active Overlays */
+            active_overlays?: components["schemas"]["PriceOverlay"][];
+            default_range: components["schemas"]["ChartRange"];
+        };
+        /**
+         * ChartPreferencesResponse
+         * @description What the controls are seeded from.
+         *
+         *     Returned with defaults filled in when the user has never saved anything, so
+         *     a client never has to special-case "no preferences yet".
+         */
+        ChartPreferencesResponse: {
+            /** Active Oscillators */
+            active_oscillators: components["schemas"]["Oscillator"][];
+            /** Active Overlays */
+            active_overlays: components["schemas"]["PriceOverlay"][];
+            default_range: components["schemas"]["ChartRange"];
+        };
+        /**
+         * ChartRange
+         * @description A window of history, expressed the way a chart toolbar expresses it.
+         *
+         *     Shared by the bars and indicators query strings and by the stored chart
+         *     preference, which is why one enum serves all three rather than each layer
+         *     inventing its own string set.
+         *
+         *     ``MAX`` means "everything stored", bounded by the row cap in
+         *     ``app.services.chart_service`` rather than by a date.
+         * @enum {string}
+         */
+        ChartRange: "1M" | "3M" | "6M" | "1Y" | "2Y" | "MAX";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -333,6 +479,53 @@ export interface components {
             status: string;
             /** Version */
             version: string;
+        };
+        /**
+         * IndicatorResponse
+         * @description Null means "not enough history yet", never zero.
+         */
+        IndicatorResponse: {
+            /** Atr 14 */
+            atr_14?: string | null;
+            /** Ema 12 */
+            ema_12?: string | null;
+            /** Ema 26 */
+            ema_26?: string | null;
+            /** Macd */
+            macd?: string | null;
+            /** Macd Histogram */
+            macd_histogram?: string | null;
+            /** Macd Signal */
+            macd_signal?: string | null;
+            /** Rsi 14 */
+            rsi_14?: string | null;
+            /** Sma 20 */
+            sma_20?: string | null;
+            /** Sma 200 */
+            sma_200?: string | null;
+            /** Sma 50 */
+            sma_50?: string | null;
+            /**
+             * Trade Date
+             * Format: date
+             */
+            trade_date: string;
+            /** Volume Sma 20 */
+            volume_sma_20?: string | null;
+        };
+        /**
+         * IndicatorsResponse
+         * @description The same window as ``BarsResponse``, same order, aligned by trade date.
+         *
+         *     Two responses rather than one combined payload: they are two parallel round
+         *     trips rather than an N+1, and they stay independently useful — Phase 4 wants
+         *     indicators without bars, and an export wants bars without indicators.
+         */
+        IndicatorsResponse: {
+            /** Indicators */
+            indicators: components["schemas"]["IndicatorResponse"][];
+            /** Ticker */
+            ticker: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -355,6 +548,30 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * Oscillator
+         * @description Indicators that get a pane of their own, because their scale is not price.
+         * @enum {string}
+         */
+        Oscillator: "rsi_14" | "macd";
+        /**
+         * PriceOverlay
+         * @description Indicators drawn on the price pane, in price units.
+         *
+         *     Only moving averages qualify: an overlay has to share the candles' y-scale
+         *     to mean anything, which rules out RSI (0-100) and MACD (centred on zero).
+         *     Each value is a column of ``daily_indicators``.
+         *
+         *     **Exactly three, and that is not an accident.** The validated overlay
+         *     palette has three slots, and the chart assigns colour by indicator identity
+         *     rather than by the order lines were switched on — otherwise turning one off
+         *     repaints the others. Those two facts together mean the number of overlay
+         *     identities cannot exceed the number of slots, or some pair is permanently
+         *     the same colour. The stored EMAs are deliberately absent for that reason:
+         *     they exist to feed MACD, which has its own pane.
+         * @enum {string}
+         */
+        PriceOverlay: "sma_20" | "sma_50" | "sma_200";
         /**
          * QuoteResponse
          * @description A price, with both timestamps.
@@ -758,6 +975,59 @@ export interface operations {
             };
         };
     };
+    chart_get_chart_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartPreferencesResponse"];
+                };
+            };
+        };
+    };
+    chart_put_chart_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChartPreferencesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     meta_get_meta: {
         parameters: {
             query?: never;
@@ -860,6 +1130,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SymbolResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "market-data_get_bars": {
+        parameters: {
+            query?: {
+                /** @description A preset window (1M, 3M, 6M, 1Y, 2Y, MAX). Mutually exclusive with start/end. */
+                range?: components["schemas"]["ChartRange"] | null;
+                /** @description Explicit window start. Requires 'end' and excludes 'range'. */
+                start?: string | null;
+                /** @description Explicit window end. Requires 'start' and excludes 'range'. */
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BarsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "market-data_get_indicators": {
+        parameters: {
+            query?: {
+                /** @description A preset window (1M, 3M, 6M, 1Y, 2Y, MAX). Mutually exclusive with start/end. */
+                range?: components["schemas"]["ChartRange"] | null;
+                /** @description Explicit window start. Requires 'end' and excludes 'range'. */
+                start?: string | null;
+                /** @description Explicit window end. Requires 'start' and excludes 'range'. */
+                end?: string | null;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndicatorsResponse"];
                 };
             };
             /** @description Validation Error */
