@@ -444,7 +444,17 @@ column, not a window function in the query**; `compare` between two columns is
 **in scope and is the point**; and fundamentals are **out of scope with a
 reason**, not forgotten.
 
-One thing to decide *during* the phase rather than now: whether
-`pct_from_52w_high` reads better as a positive distance below the high or as a
-negative percentage. Pick one when there is a table to look at, and make the
-label say which.
+One thing was left to decide *during* the phase rather than at spec time:
+whether `pct_from_52w_high` reads better as a positive distance below the high
+or as a negative percentage.
+
+**Decided: signed, negative below the high** — `-0.50` for a stock half a
+percent off its high. With a real table to look at, the deciding argument was
+not this field on its own but the family it belongs to. There are four
+`pct_from_*` fields, and `pct_from_sma_50` is unambiguously positive above its
+reference; a positive-distance-*below* reading for this one would make the two
+columns disagree about which way is up while sharing a naming convention and a
+unit. The label stays `% from 52-week high` and the sign is what says which
+direction — spelling out "below" for one of four otherwise identical columns
+would trade a small ambiguity for a larger inconsistency. `pct_from_52w_low`
+was added alongside it for the same symmetry.

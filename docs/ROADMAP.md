@@ -15,7 +15,7 @@ spec because agents trust it.
 | 1 | Auth & users | ✅ complete — [spec](phases/phase-1-auth.md) |
 | 2 | Market data foundation + watchlists | ✅ complete — [spec](phases/phase-2-market-data.md) |
 | 3 | Analysis & charting | ✅ complete — [spec](phases/phase-3-charting.md) |
-| 4 | Screeners | 🚧 in progress — [spec](phases/phase-4-screeners.md) |
+| 4 | Screeners | ✅ complete — [spec](phases/phase-4-screeners.md) |
 | 5 | Alerts, background jobs, real-time | ⬜ next |
 | 6 | Trading log & performance insights | ⬜ |
 | 7 | Polish, hardening, deploy | ⬜ |
@@ -126,7 +126,7 @@ Three things worth carrying forward:
   express it. `CALLER_SCOPED_RESOURCES` asserts the failure it can actually
   have: one user's write landing on another user's row.
 
-## Phase 4 — Screeners 🚧
+## Phase 4 — Screeners ✅
 
 **Spec: [`docs/phases/phase-4-screeners.md`](phases/phase-4-screeners.md)**
 
@@ -158,11 +158,27 @@ Four calls made while writing the spec:
   `symbols` has no such columns and there is no provider account to fill them.
   They arrive later as ordinary registry entries; the DSL does not change.
 
-The phase opens with a chore rather than a feature: at the end of Phase 3 only
+The phase opened with a chore rather than a feature: at the end of Phase 3 only
 **4 of 533 symbols had any bars**, which a one-symbol-at-a-time chart never
 noticed. A screener is the first feature that sparse data makes silently
 *wrong* rather than visibly empty — three results look like a selective filter,
 not like a missing backfill.
+
+Three things worth carrying forward:
+
+- **`make backfill days=730` over the full universe takes 8m19s** — 533 symbols,
+  278,230 bars and as many indicator rows, and the database grew from 10 MB to
+  127 MB. Phase 5's nightly ingest is scheduling a fraction of that (one bar per
+  symbol), but the number is the one to start from, and a re-backfill of the
+  whole window is a coffee break rather than a background job.
+- **A `trade_date`-only index was not optional.** Both bar tables are keyed
+  `(symbol_id, trade_date)`, which every query before this one wanted; the
+  screener filters on the date and not on the symbol at all. With the index the
+  run plans as two bitmap index scans and executes in ~5 ms over 278k rows.
+- **The row cap forces sorting to be server-side.** `total_matched` is the
+  pre-cap count, so re-ordering the hundred rows already returned would sort a
+  hundred of four hundred matches and present them as the top hundred. There is
+  no pagination on purpose: a screen returning 412 of 530 wants narrowing.
 
 ## Phase 5 — Alerts, jobs, real-time
 
