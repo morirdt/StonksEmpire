@@ -33,6 +33,9 @@ _INDICATOR_COLUMNS = (
     "macd_histogram",
     "atr_14",
     "volume_sma_20",
+    "change_percent_1d",
+    "high_52w",
+    "low_52w",
 )
 
 
