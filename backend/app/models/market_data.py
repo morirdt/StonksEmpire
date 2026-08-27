@@ -17,7 +17,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Numeric, Uuid
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Index, Numeric, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -28,6 +28,11 @@ _PRICE = Numeric(18, 6)
 
 class DailyBar(Base, TimestampMixin):
     __tablename__ = "daily_bars"
+    #: The primary key leads with ``symbol_id``, which is the right order for
+    #: every per-symbol query. Phase 4's screener is the exception: it filters
+    #: on ``trade_date`` first and ``symbol_id`` not at all, which that index
+    #: cannot serve. Hence a second index on the date alone.
+    __table_args__ = (Index("ix_daily_bars_trade_date", "trade_date"),)
 
     symbol_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
@@ -68,6 +73,8 @@ class DailyIndicator(Base, TimestampMixin):
     """
 
     __tablename__ = "daily_indicators"
+    #: See ``DailyBar`` — the screener joins this table on the date too.
+    __table_args__ = (Index("ix_daily_indicators_trade_date", "trade_date"),)
 
     symbol_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
@@ -87,6 +94,14 @@ class DailyIndicator(Base, TimestampMixin):
     macd_histogram: Mapped[Decimal | None] = mapped_column(_PRICE, nullable=True)
     atr_14: Mapped[Decimal | None] = mapped_column(_PRICE, nullable=True)
     volume_sma_20: Mapped[Decimal | None] = mapped_column(_PRICE, nullable=True)
+    #: Percent change from the previous bar's close. Null on a symbol's first
+    #: bar, where there is no previous close to change from.
+    change_percent_1d: Mapped[Decimal | None] = mapped_column(_PRICE, nullable=True)
+    #: Trailing 52-week extremes, counted in **bars, not calendar days** — 252
+    #: is a trading year. ``ChartRange`` is calendar-based instead, because a
+    #: toolbar label promises calendar time; both are right for their own job.
+    high_52w: Mapped[Decimal | None] = mapped_column(_PRICE, nullable=True)
+    low_52w: Mapped[Decimal | None] = mapped_column(_PRICE, nullable=True)
 
     def __repr__(self) -> str:
         return f"<DailyIndicator {self.symbol_id} {self.trade_date}>"

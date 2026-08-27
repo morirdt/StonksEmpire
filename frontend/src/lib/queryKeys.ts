@@ -36,6 +36,18 @@ export const queryKeys = {
     // rather than fetching the same prices twice under two keys.
     byTickers: (tickers: string[]) => ['quotes', [...tickers].sort().join(',')] as const,
   },
+  screener: {
+    all: () => ['screener'] as const,
+    // The catalogue changes only when a column is added or a new exchange
+    // appears in the universe, so it is one key with no parameters.
+    fields: () => ['screener', 'fields'] as const,
+    // A run is keyed by the filter tree *and* the sort, serialised: two
+    // different screens must not share a cache entry, and the same screen run
+    // twice must.
+    run: (signature: string) => ['screener', 'run', signature] as const,
+    presets: () => ['screener', 'presets'] as const,
+    preset: (id: string) => ['screener', 'preset', id] as const,
+  },
   watchlists: {
     all: () => ['watchlists'] as const,
     list: () => ['watchlists', 'list'] as const,
