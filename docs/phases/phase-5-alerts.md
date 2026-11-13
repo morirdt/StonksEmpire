@@ -7,9 +7,8 @@ them.
 **Goal:** the data refreshes itself, and the app tells a signed-in user when
 something they care about happens. A user can set an alert on a symbol or on a
 saved screen. A background worker keeps quotes and bars current and evaluates
-alerts against them. When one fires, it lands in an in-app notification list and
-in the user's inbox (if they asked for that), and an open tab hears about it
-within seconds without reloading.
+alerts against them. When one fires, it lands in an in-app notification list,
+and an open tab hears about it within seconds without reloading.
 
 ## The shape of this phase
 
@@ -35,7 +34,7 @@ from that:
 The rule that answers most of it:
 
 > **Postgres is the source of truth and Redis never is.** Every alert, trigger,
-> notification, and delivery status lives in Postgres and is written in the same
+> and notification lives in Postgres and is written in the same
 > transaction as the change that caused it. Redis carries rate-limit counts,
 > breaker state, a heartbeat, and pub/sub *hints*. If Redis is flushed, nothing
 > a user can see is lost. If a push message is dropped, the client refetches and
@@ -52,11 +51,9 @@ Build in this order:
 3. **The worker** — container, scheduler, advisory locks, heartbeat — and its
    three ingest jobs, with alert evaluation still stubbed out.
 4. **Alerts**: model, CRUD, evaluation inside the jobs, trigger history.
-5. **Notifications** — the in-app list. The outbox fields are on it from the
-   start.
-6. **Email**: verification, the delivery job, Mailpit.
-7. **The WebSocket** and the frontend wiring.
-8. **Screen alerts**, last, because they are the one piece that can be cut
+5. **Notifications** — the in-app list.
+6. **The WebSocket** and the frontend wiring.
+7. **Screen alerts**, last, because they are the one piece that can be cut
    without disturbing the rest.
 
 ## Dependencies to add
@@ -65,13 +62,11 @@ Build in this order:
 |---|---|---|
 | backend | `apscheduler>=3.11,<4` | The scheduler. **Pinned below 4:** 4.0 is still alpha (`4.0.0a6` at the time of writing) and has an entirely different API. Do not "upgrade" across that line in passing |
 | backend | `redis>=8.1` | `redis.asyncio`. Not `aioredis`, which merged into `redis-py` and is dead. Add it to the dependency policy in `CLAUDE.md` |
-| backend | `aiosmtplib>=5.1` | Async SMTP. `smtplib` would block the event loop for the length of a TLS handshake |
 | backend | `holidays` | Its NYSE financial calendar, used for market-hours gating. Pure Python. **Not `exchange_calendars`** — it pulls in pandas, and the project computes in `Decimal` without pandas on purpose |
 | frontend | none | The browser's native `WebSocket` is enough. A socket library would add a protocol on top of one that this phase deliberately keeps small |
 
-Compose gains three services: `redis` (`redis:8-alpine`), `worker` (same image
-as `api`, different command), and `mailpit` (`axllent/mailpit`; pin a tag at
-implementation). CI gains a `redis` service next to `postgres` in both jobs that
+Compose gains two services: `redis` (`redis:8-alpine`) and `worker` (same
+image as `api`, different command). CI gains a `redis` service next to `postgres` in both jobs that
 run integration tests.
 
 After adding dependencies, recreate both containers that install them:
@@ -227,7 +222,6 @@ one, harmless.
 | `poll_quotes` | every 60 s | `is_market_open`, plus one final run at 16:05 | Refresh quotes for the hot set; evaluate intraday alerts; publish `quotes_updated` |
 | `ingest_eod` | 17:30 daily | `is_trading_day` | Fetch bars since each active symbol's last stored date; recompute indicators; evaluate end-of-day and screen alerts |
 | `refresh_symbols` | Sun 06:00 | — | Upsert the provider's universe; **deactivate** symbols no longer listed |
-| `deliver_email` | every 60 s | — | Drain the email outbox (see *Email*) |
 | `prune_notifications` | 03:00 daily | — | Delete read notifications older than 90 days |
 | `heartbeat` | every 15 s | — | `SET worker:heartbeat <now> EX 60` |
 
@@ -361,11 +355,9 @@ Within one transaction:
 2. Insert an `alert_triggers` row with a **snapshot** of the values that made it
    fire. This is the Phase 4 rule that a result shows *why*. "AAPL crossed
    above its 200-day" carries the price and the average at that minute.
-3. Insert a `notifications` row. If the user chose email, set its email fields
-   to `pending`.
+3. Insert a `notifications` row.
 
-**After** the commit, publish a `notification_created` hint to Redis. Email
-goes out later through the outbox. Nothing outside Postgres happens inside the
+**After** the commit, publish a `notification_created` hint to Redis. Nothing outside Postgres happens inside the
 transaction: a crash after commit loses at most one push hint, and a crash
 before commit loses nothing, because the next run finds the same edge.
 
@@ -374,16 +366,20 @@ before commit loses nothing, because the next run finds the same edge.
 | Limit | Value | Why |
 |---|---|---|
 | Active alerts per user | 50 | Every intraday alert can add a symbol to the hot set, which is spent against provider quota |
-| Alert emails per user per hour | 20 | Beyond this, delivery is in-app only and the notification says email was skipped |
 
-Both are settings. Test each at the limit and one past it, as Phase 4 did.
+It is a setting. Test it at the limit and one past it, as Phase 4 did.
 
 ## Notifications
 
-One table, two jobs: the in-app list, and the email outbox. One row per thing
-the user should hear about: `alert_triggered`, `alert_disabled`, and
-`email_verification` is *not* one of them, because a verification email is
-account mail rather than a notification (see *Email*).
+One table, one row per thing the user should hear about: `alert_triggered` and
+`alert_disabled`. In this phase it is the only channel.
+
+**This table is also where email will attach in Phase 7**, as outbox columns on
+the same row, which is why a firing writes its notification inside the firing's
+transaction. The ordering in *Recording a firing* already gives a later email
+channel what it needs (a durable row to deliver from, written exactly once), so
+adding it should be columns and a delivery job, not a redesign. Do not add
+those columns now: an unused `email_status` is a schema promise nothing keeps.
 
 **A push is a hint, not the data.** `notification_created` carries the id. The
 client invalidates its notification queries and refetches over REST. That way
@@ -393,56 +389,6 @@ lost notification.
 The list is **cursor-paginated** on `(created_at, id)`, unlike the screener.
 Screen results are bounded by the universe. Notifications grow without bound,
 and an offset that shifts every time a new one arrives skips or repeats rows.
-
-## Email
-
-### Verification has to come first
-
-`users.is_verified` exists and is noted as "unused until Phase 7 brings email
-delivery". But this phase brings email delivery, and **sending alert email to an
-address nobody has proved they own makes the app a mail cannon**. Anyone can
-register with someone else's address, set 50 rearming alerts, and point them at
-that person.
-
-So:
-
-- **The email channel requires `is_verified`.** Turning it on for an unverified
-  account returns a 422 that says how to verify.
-- **Verification moves into this phase**, and only as much of it as email
-  alerts need: `POST /me/verify-email` sends a link (rate-limited per user, and
-  through the Redis limiter), and `POST /auth/verify-email` takes the token.
-  The token is a signed JWT with `purpose: "verify_email"`, a 24-hour expiry,
-  and the address it was issued for. If the address has changed since, the
-  token is rejected.
-- **Login still does not require verification.** Gating login, and fixing the
-  registration-enumeration message that `auth_service.py` defers "to Phase 7",
-  stay in Phase 7.
-
-### Delivery
-
-`EmailSender` protocol with one implementation, `SmtpEmailSender`, via
-`aiosmtplib`. **Locally it points at Mailpit**, so a fresh clone sends real SMTP
-and a person can read the result at `http://localhost:8025` with no account
-anywhere. That is the same reason `Fake` is the default market data provider.
-Tests inject an in-memory recorder, so CI does not need Mailpit.
-
-The outbox fields on `notifications` are `email_status` (`not_requested`,
-`pending`, `sent`, `failed`), `email_attempts`, `email_next_attempt_at`, and
-`email_last_error`. `deliver_email` claims due rows with `FOR UPDATE SKIP
-LOCKED` and sends each one **after** committing the claim. It retries with
-exponential backoff and gives up as `failed` after 5 attempts.
-
-That is **at-least-once**: a crash between a successful send and the commit
-that records it causes a duplicate send. Put the notification id in a
-`Message-ID` header so a mail client can deduplicate, and accept the rare
-duplicate. The alternative is at-most-once, which loses alerts silently, and
-that is the worse of the two failures.
-
-Production hardening: `EMAIL__SMTP_HOST` and `EMAIL__FROM_ADDRESS` are required
-when `ENVIRONMENT=prod`, enforced by the existing startup validator. An email
-body never contains the token or any secret other than the verification link
-itself. structlog already redacts `token`; log the notification id, never the
-link.
 
 ## Real-time
 
@@ -503,17 +449,15 @@ All under `/api/v1`, all requiring `CurrentUser` except where noted.
 |---|---|---|
 | GET | `/alerts/fields?kind=` | Registry for `intraday` or `end_of_day` |
 | GET | `/alerts` | The caller's alerts, with `last_evaluated_at` and `last_triggered_at` |
-| POST | `/alerts` | Create. `422` past the active cap, on an invalid tree, or email on an unverified account. Response includes `condition_met_now` |
+| POST | `/alerts` | Create. `422` past the active cap or on an invalid tree. Response includes `condition_met_now` |
 | GET | `/alerts/{id}` | One alert |
-| PATCH | `/alerts/{id}` | Edit name, condition, mode, cooldown, email, or `status` between `active`/`paused`. Editing the condition resets `last_state` |
+| PATCH | `/alerts/{id}` | Edit name, condition, mode, cooldown, or `status` between `active`/`paused`. Editing the condition resets `last_state` |
 | DELETE | `/alerts/{id}` | `204` |
 | GET | `/alerts/{id}/triggers` | Firing history with snapshots, newest first, cursor-paginated |
 | GET | `/me/notifications` | Cursor-paginated; `?unread=true` |
 | GET | `/me/notifications/unread-count` | For the badge |
 | POST | `/me/notifications/{id}/read` | Idempotent |
 | POST | `/me/notifications/read-all` | Idempotent |
-| POST | `/me/verify-email` | Send a verification link. Rate-limited |
-| POST | `/auth/verify-email` | **Unauthenticated**; takes the token |
 | GET | `/ws` | WebSocket; auth by first message |
 
 Alerts use the same JSONB-and-validate pattern as presets: **the list does not
@@ -538,7 +482,6 @@ All of these follow `CLAUDE.md`'s data conventions: UUIDv7 keys,
 | `condition` | `JSONB` null | Required unless `kind = screen` |
 | `trigger_mode` | `VARCHAR(8)` | `once`, `rearm` |
 | `cooldown_minutes` | `INTEGER` | CHECK 5–1440 |
-| `notify_email` | `BOOLEAN` | |
 | `status` | `VARCHAR(16)` | `active`, `paused`, `triggered`, `disabled` |
 | `disabled_reason` | `VARCHAR(200)` null | |
 | `last_state` | `BOOLEAN` null | |
@@ -570,12 +513,10 @@ triggered_at)`. Kept indefinitely, because the history is part of the feature.
 
 `id`, `user_id`, `kind`, `title VARCHAR(200)`, `body TEXT`, `payload JSONB` (the
 link target: alert id, ticker), `alert_id` null (`ON DELETE SET NULL`, so the
-notification outlives the alert), `read_at` null, and the four outbox fields
-above.
+notification outlives the alert), and `read_at` null.
 
-Indexes: `(user_id, created_at, id)` for the cursor; a partial index on
-`(user_id) WHERE read_at IS NULL` for the badge; a partial index on
-`(email_next_attempt_at) WHERE email_status = 'pending'` for the outbox.
+Indexes: `(user_id, created_at, id)` for the cursor, and a partial index on
+`(user_id) WHERE read_at IS NULL` for the badge.
 
 Ordinary CRUD for all three, so there are no repositories. The exception is the
 evaluation queries in the jobs, which are not CRUD and get one
@@ -588,11 +529,7 @@ New nested groups, each with defaults that work on a fresh clone:
 - `REDIS__URL` — default `redis://localhost:6379/0`; Compose overrides the host.
 - `WORKER__QUOTE_POLL_SECONDS` (60), `WORKER__EOD_INGEST_TIME` (`17:30`),
   `WORKER__MAX_INGEST_GAP_DAYS` (30).
-- `ALERTS__MAX_ACTIVE_PER_USER` (50), `ALERTS__DEFAULT_COOLDOWN_MINUTES` (60),
-  `ALERTS__MAX_EMAILS_PER_HOUR` (20).
-- `EMAIL__SMTP_HOST` (`localhost`), `EMAIL__SMTP_PORT` (1025), `EMAIL__SMTP_USER`,
-  `EMAIL__SMTP_PASSWORD`, `EMAIL__USE_TLS` (false), `EMAIL__FROM_ADDRESS`,
-  `EMAIL__APP_BASE_URL` (for links).
+- `ALERTS__MAX_ACTIVE_PER_USER` (50), `ALERTS__DEFAULT_COOLDOWN_MINUTES` (60).
 
 `.env.example` gains all of them, with comments matching the existing ones.
 
@@ -624,9 +561,6 @@ New nested groups, each with defaults that work on a fresh clone:
   grid frozen whenever Redis or the socket is down. So `GRID_POLL_INTERVAL_MS`
   stays and is applied **only while the socket is not connected**. Update that
   comment.
-- **"Email me" is disabled with an explanation on an unverified account**, next
-  to a "send verification link" action. A `/verify-email?token=` route completes
-  the flow.
 - Every new key goes in `src/lib/queryKeys.ts`. `make gen-api` and commit
   `schema.ts`.
 
@@ -661,10 +595,6 @@ New nested groups, each with defaults that work on a fresh clone:
 - **The Redis limiter** is atomic. Two concurrent `allow` calls at one remaining
   token: exactly one succeeds. With Redis unreachable it falls back to in-process
   rather than allowing everything. Test the login limiter specifically for that.
-- **Email**: an unverified account cannot enable it; the outbox retries on
-  failure with growing delay, and is `failed` after 5 attempts; the hourly cap
-  holds at the limit and one past; a verification token for an old address is
-  rejected after the address changes; an expired token is rejected.
 - **WebSocket**: no auth message within the window → 4401; a bad token → 4401;
   an expired token closes the socket, and a re-auth before expiry keeps it open;
   a deactivated user is closed at the next expiry; a foreign `Origin` is
@@ -682,8 +612,7 @@ New nested groups, each with defaults that work on a fresh clone:
 - **Frontend**: the socket invalidates the right keys and nothing else; polling
   resumes when the socket drops and stops when it reconnects; a 4401 goes
   through the shared refresh. **Two simultaneous 401s plus a 4401 must produce
-  exactly one refresh call.** Also: the bell's count updates on a push; the email
-  toggle is disabled on an unverified account; the builder still round-trips
+  exactly one refresh call.** Also: the bell's count updates on a push; the builder still round-trips
   after the move.
 
 ## Out of scope
@@ -695,10 +624,19 @@ validated overlay colours, so a fourth has to be validated in both modes before
 any line exists. That is a small change, but it is a chart change, and this
 phase does not otherwise touch the chart.
 
-Also out: SMS, browser push, and webhooks as channels · digest emails ·
-`List-Unsubscribe` and bulk-sender compliance · pre-market and after-hours
-quotes · storing intraday bars · requiring verification to log in, and the
-registration-enumeration fix (both Phase 7) · a real market data provider ·
+**Email notifications, moved to Phase 7.** In-app is the only channel this
+phase. Email cannot ship on its own: sending alert mail to an address nobody has
+proved they own turns the app into a mail cannon (anyone could register someone
+else's address and point 50 rearming alerts at it), so the email channel needs
+verification first. Phase 7 already owns verification (`users.is_verified` is
+documented as waiting for it), and `auth_service.py`'s
+registration-enumeration fix is waiting for email delivery too. That is three
+pieces of work that need the same infrastructure (SMTP sender, a local catcher
+such as Mailpit, an outbox, a delivery job, verification), so they land
+together. See *Notifications* for how this phase leaves room for it.
+
+Also out: SMS, browser push, and webhooks as channels · pre-market and
+after-hours quotes · storing intraday bars · a real market data provider ·
 running more than one `api` replica, which this design supports but nothing
 tests · ARQ, which the roadmap names as the upgrade path if jobs ever become a
 queue rather than a schedule.
@@ -707,7 +645,7 @@ queue rather than a schedule.
 
 - [ ] `make check` green; `make migration-check` reports no drift; migrations
       round-trip `downgrade base` → `upgrade head`.
-- [ ] `make up` starts `db`, `redis`, `api`, `worker`, `mailpit`, and `web` on a
+- [ ] `make up` starts `db`, `redis`, `api`, `worker`, and `web` on a
       fresh clone with **no** credentials, and all report healthy.
 - [ ] Provider rate limit and breaker are shared through Redis; stopping Redis
       degrades `/ready` without failing it, and login limiting falls back rather
@@ -721,8 +659,7 @@ queue rather than a schedule.
 - [ ] In a browser, during market hours (or with the worker's clock pinned
       inside a session): create an intraday alert on a ticker just past its
       current `Fake` price, watch it fire within a few minutes, see the bell
-      update **without a reload**, and read the email in Mailpit. Stop the
-      worker; the alert's "last checked" visibly ages and `/ready` names
+      update **without a reload**. Stop the worker; the alert's "last checked" visibly ages and `/ready` names
       `worker`.
 - [ ] The watchlist grid updates from a push while the socket is up and falls
       back to polling when it is down.
@@ -738,18 +675,19 @@ queue rather than a schedule.
 ## Open questions
 
 Several calls were made while writing this spec and are recorded above rather
-than left implicit. Two of them change the phase's size, so they are worth
-confirming before building:
+than left implicit. One changes the phase's size and is worth confirming before
+building it:
 
-1. **Email verification is pulled forward from Phase 7.** The alternative is to
-   ship in-app notifications only and move the email channel to Phase 7 with
-   verification. That would make this phase smaller by one table's worth of
-   outbox fields, two endpoints, and Mailpit. Email without verification is not
-   an option.
-2. **Screen alerts are in.** Phase 4 promised them "in Phase 5", and given the
-   compiler and the nightly job they are cheap. They are also last in the build
-   order and touch nothing else, so cutting them costs the promise and nothing
-   more.
+- **Screen alerts are in.** Phase 4 promised them "in Phase 5", and given the
+  compiler and the nightly job they are cheap. They are also last in the build
+  order and touch nothing else, so cutting them costs the promise and nothing
+  more.
+
+**Decided after review: email is out.** The first draft pulled email
+verification forward from Phase 7 so alerts could be emailed. That made the
+phase larger by an SMTP sender, Mailpit, an outbox, a delivery job, and two
+verification endpoints. In-app notifications ship alone, and email moves to
+Phase 7 alongside verification (see *Out of scope*).
 
 Decided and not open: Redis is never the source of truth; pushes are hints;
 alerts reuse the filter DSL rather than growing a second one; firing is

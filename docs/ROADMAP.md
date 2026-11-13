@@ -186,8 +186,13 @@ Three things worth carrying forward:
 
 Redis · APScheduler worker container with advisory locks and market-hours gating ·
 quote polling, nightly EOD ingest, symbol refresh · alert conditions, trigger
-modes, cooldowns, trigger history · email delivery · WebSocket fan-out via Redis
-pub/sub · in-app notifications.
+modes, cooldowns, trigger history · WebSocket fan-out via Redis pub/sub · in-app
+notifications.
+
+> Email delivery was on this list and moved to Phase 7 while the spec was
+> written: emailing an unverified address lets anyone aim alerts at someone
+> else's inbox, so email has to arrive together with verification, which Phase 7
+> already owns.
 
 ## Phase 6 — Trading log & analytics
 
@@ -200,7 +205,9 @@ analytics dashboard.
 ## Phase 7 — Polish & deploy
 
 Dashboard · empty/loading/error states · responsive and a11y pass · Playwright
-smoke tests · Sentry and metrics · demo seed data · deploy.
+smoke tests · Sentry and metrics · demo seed data · deploy · email delivery with
+verification, alert emails on the Phase 5 notifications table, and the
+registration-enumeration fix · alert levels drawn on the chart.
 
 ## Key decisions
 
