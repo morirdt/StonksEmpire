@@ -16,7 +16,7 @@ spec because agents trust it.
 | 2 | Market data foundation + watchlists | ✅ complete — [spec](phases/phase-2-market-data.md) |
 | 3 | Analysis & charting | ✅ complete — [spec](phases/phase-3-charting.md) |
 | 4 | Screeners | ✅ complete — [spec](phases/phase-4-screeners.md) |
-| 5 | Alerts, background jobs, real-time | ⬜ next |
+| 5 | Alerts, background jobs, real-time | 🟡 spec written — [spec](phases/phase-5-alerts.md) |
 | 6 | Trading log & performance insights | ⬜ |
 | 7 | Polish, hardening, deploy | ⬜ |
 
@@ -181,6 +181,8 @@ Three things worth carrying forward:
   no pagination on purpose: a screen returning 412 of 530 wants narrowing.
 
 ## Phase 5 — Alerts, jobs, real-time
+
+**Spec: [`docs/phases/phase-5-alerts.md`](phases/phase-5-alerts.md)**
 
 Redis · APScheduler worker container with advisory locks and market-hours gating ·
 quote polling, nightly EOD ingest, symbol refresh · alert conditions, trigger
