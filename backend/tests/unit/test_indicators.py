@@ -53,8 +53,9 @@ def _bars(
 _ULP = Decimal("0.000001")
 
 
-def _values(row: object) -> list[Decimal | None]:
-    return [getattr(row, f.name) for f in fields(row) if f.name != "trade_date"]  # type: ignore[arg-type]
+def _values(row: object, *, exclude: tuple[str, ...] = ()) -> list[Decimal | None]:
+    skip = {"trade_date", *exclude}
+    return [getattr(row, f.name) for f in fields(row) if f.name not in skip]  # type: ignore[arg-type]
 
 
 def _first_defined(rows: list, field: str) -> int | None:
@@ -260,6 +261,10 @@ def test_the_histogram_is_the_gap_between_them() -> None:
         ("macd_histogram", 33),
         ("atr_14", 14),
         ("volume_sma_20", 19),
+        ("change_percent_1d", 1),
+        # 252 bars, not 252 calendar days — the window is counted in bars.
+        ("high_52w", 251),
+        ("low_52w", 251),
     ],
 )
 def test_each_indicator_starts_exactly_where_it_becomes_defined(
@@ -280,8 +285,81 @@ def test_a_short_series_yields_no_sma_200() -> None:
 
 
 def test_a_series_shorter_than_every_window_is_all_none() -> None:
+    """Every windowed indicator, that is.
+
+    ``change_percent_1d`` is excluded because its window is a single bar, so it
+    is defined from the second one onwards — which is the point of it, and the
+    reason it is the only column here a three-bar series can populate.
+    """
     rows = compute_indicators(_bars([100, 101, 102]))
 
     assert len(rows) == 3
     for row in rows:
-        assert all(v is None for v in _values(row))
+        assert all(v is None for v in _values(row, exclude=("change_percent_1d",)))
+
+
+# ------------------------------------------------- change percent and extremes
+
+
+def test_change_percent_is_measured_against_the_previous_close() -> None:
+    rows = compute_indicators(_bars([100, 110, 99]))
+
+    assert rows[0].change_percent_1d is None
+    assert rows[1].change_percent_1d == Decimal("10")
+    assert rows[2].change_percent_1d == Decimal("-10")
+
+
+def test_change_percent_of_a_flat_series_is_zero_not_none() -> None:
+    """Zero and "no answer" are different things, and only one of them is a match."""
+    rows = compute_indicators(_bars([50] * 5))
+
+    assert rows[0].change_percent_1d is None
+    assert all(r.change_percent_1d == Decimal("0") for r in rows[1:])
+
+
+def test_change_percent_from_a_zero_close_is_none_rather_than_infinite() -> None:
+    """A division by zero is an absence of an answer, not an infinite gain."""
+    rows = compute_indicators(_bars([0, 10]))
+
+    assert rows[1].change_percent_1d is None
+
+
+def test_the_52_week_window_is_252_bars_not_252_days() -> None:
+    """The distinction the comment in indicator_service exists to defend.
+
+    ``ChartRange`` is calendar-based because a toolbar label promises calendar
+    time; this window is not, because a trading year is 252 sessions. Both are
+    correct for their own job, and the next reader will assume one is a mistake.
+    """
+    rows = compute_indicators(_bars([100] * 251))
+    assert all(r.high_52w is None for r in rows)
+
+    rows = compute_indicators(_bars([100] * 252))
+    assert rows[-1].high_52w == Decimal("100")
+
+
+def test_the_52_week_extremes_track_the_trailing_window_only() -> None:
+    """A spike must leave the high once it falls out of the window behind it."""
+    closes = [100] * 260
+    closes[0] = 500
+    highs = list(closes)
+    lows = [1 if i == 0 else 100 for i in range(260)]
+
+    rows = compute_indicators(_bars(closes, highs=highs, lows=lows))
+
+    # Bar 251 is the last one whose 252-bar window still contains bar 0.
+    assert rows[251].high_52w == Decimal("500")
+    assert rows[251].low_52w == Decimal("1")
+    assert rows[252].high_52w == Decimal("100")
+    assert rows[252].low_52w == Decimal("100")
+
+
+def test_the_52_week_extremes_read_highs_and_lows_not_closes() -> None:
+    """A close never exceeds its own bar's high, so reading the wrong column is
+    invisible on a flat series and wrong on every real one."""
+    rows = compute_indicators(
+        _bars([100] * 252, highs=[150] * 252, lows=[50] * 252),
+    )
+
+    assert rows[-1].high_52w == Decimal("150")
+    assert rows[-1].low_52w == Decimal("50")

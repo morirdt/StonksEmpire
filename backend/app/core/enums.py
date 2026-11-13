@@ -76,3 +76,86 @@ class Oscillator(StrEnum):
 
     RSI_14 = "rsi_14"
     MACD = "macd"
+
+
+class FilterKind(StrEnum):
+    """The node kinds a screener filter tree is built from.
+
+    Also the vocabulary the field registry uses to say what a field may appear
+    in: ``close`` is ``numeric`` and ``compare``, ``exchange`` is ``category``
+    only, and ``ticker`` is none of them — it is sortable and displayed, but
+    filtering on it is what the symbol search is for.
+    """
+
+    NUMERIC = "numeric"
+    COMPARE = "compare"
+    CATEGORY = "category"
+    GROUP = "group"
+
+
+class NumericOperator(StrEnum):
+    """Comparisons between a field and a literal value.
+
+    ``BETWEEN`` is here and not on ``CompareOperator`` because it takes a second
+    operand, which only makes sense against literals.
+    """
+
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    EQ = "eq"
+    NEQ = "neq"
+    BETWEEN = "between"
+
+
+class CompareOperator(StrEnum):
+    """Comparisons between two fields.
+
+    Deliberately a separate enum rather than a subset of ``NumericOperator``:
+    ``between`` has no meaning here, and an enum that has to be range-checked
+    after parsing is not doing its job.
+    """
+
+    GT = "gt"
+    GTE = "gte"
+    LT = "lt"
+    LTE = "lte"
+    EQ = "eq"
+    NEQ = "neq"
+
+
+class CategoryOperator(StrEnum):
+    """Set membership, for fields whose values are labels rather than numbers."""
+
+    IN = "in"
+    NOT_IN = "not_in"
+
+
+class GroupOperator(StrEnum):
+    """How a group combines its children. Nesting is what supplies precedence."""
+
+    AND = "and"
+    OR = "or"
+
+
+class FieldUnit(StrEnum):
+    """What a screener field is measured in.
+
+    This exists to stop ``close > volume``, which parses fine and means nothing.
+    A ``compare`` node is rejected unless both sides share a unit, so the
+    registry has to carry one per field.
+    """
+
+    PRICE = "price"
+    SHARES = "shares"
+    PERCENT = "percent"
+    #: RSI and friends: bounded 0-100, comparable only with each other.
+    RATIO = "ratio"
+    #: Tickers, names, exchanges — never an operand of an arithmetic comparison.
+    TEXT = "text"
+
+
+class SortDirection(StrEnum):
+    ASC = "asc"
+    DESC = "desc"

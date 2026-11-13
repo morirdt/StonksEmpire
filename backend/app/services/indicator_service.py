@@ -28,6 +28,7 @@ these names:
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -46,6 +47,12 @@ _EMA_FAST, _EMA_SLOW, _MACD_SIGNAL = 12, 26, 9
 _RSI_PERIOD = 14
 _ATR_PERIOD = 14
 _VOLUME_SMA_PERIOD = 20
+
+#: The 52-week window is counted in **bars, not calendar days** — 252 is a
+#: trading year. This deliberately differs from ``ChartRange``, which is
+#: calendar-based because a toolbar label that says "1Y" promises calendar time.
+#: Both conventions are correct for their own job; neither is a mistake.
+_52_WEEK_BARS = 252
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +75,9 @@ class IndicatorSet:
     macd_histogram: Decimal | None = None
     atr_14: Decimal | None = None
     volume_sma_20: Decimal | None = None
+    change_percent_1d: Decimal | None = None
+    high_52w: Decimal | None = None
+    low_52w: Decimal | None = None
 
 
 def _quantize(value: Decimal | None) -> Decimal | None:
@@ -170,6 +180,55 @@ def _true_ranges(bars: Sequence[Bar]) -> list[Decimal]:
     return ranges
 
 
+def _change_percent(closes: Sequence[Decimal]) -> list[Decimal | None]:
+    """Percent change from the previous close. ``None`` on a symbol's first bar.
+
+    A previous close of zero has no percent change — it is a division by zero,
+    not an infinite gain — so it stays ``None`` and simply fails to match any
+    predicate on this field. See the null semantics in the Phase 4 spec.
+    """
+    out: list[Decimal | None] = [None] * len(closes)
+    for i in range(1, len(closes)):
+        previous = closes[i - 1]
+        if previous == 0:
+            continue
+        out[i] = (closes[i] - previous) / previous * 100
+    return out
+
+
+def _rolling_extreme(
+    values: Sequence[Decimal],
+    period: int,
+    *,
+    maximum: bool,
+) -> list[Decimal | None]:
+    """Rolling max or min over a trailing window of ``period`` **bars**.
+
+    A monotonic deque rather than ``max(values[i - period : i])``: the 252-bar
+    window over a multi-year series makes the naive form quadratic in the window
+    size, and this runs over the whole universe on every backfill.
+
+    The deque holds indices whose values are candidates for the extreme, kept in
+    monotonic order — anything a newer value dominates can never win again.
+    """
+    out: list[Decimal | None] = [None] * len(values)
+    if period <= 0 or len(values) < period:
+        return out
+
+    candidates: deque[int] = deque()
+    for i, value in enumerate(values):
+        while candidates and candidates[0] <= i - period:
+            candidates.popleft()
+        while candidates and (
+            values[candidates[-1]] <= value if maximum else values[candidates[-1]] >= value
+        ):
+            candidates.pop()
+        candidates.append(i)
+        if i >= period - 1:
+            out[i] = values[candidates[0]]
+    return out
+
+
 def compute_indicators(bars: Sequence[Bar]) -> list[IndicatorSet]:
     """One ``IndicatorSet`` per bar, in the same order.
 
@@ -189,6 +248,9 @@ def compute_indicators(bars: Sequence[Bar]) -> list[IndicatorSet]:
     ema_slow = _ema(closes, _EMA_SLOW)
     rsi = _rsi(closes, _RSI_PERIOD)
     volume_sma = _sma(volumes, _VOLUME_SMA_PERIOD)
+    change_percent = _change_percent(closes)
+    high_52w = _rolling_extreme([b.high for b in bars], _52_WEEK_BARS, maximum=True)
+    low_52w = _rolling_extreme([b.low for b in bars], _52_WEEK_BARS, maximum=False)
 
     # MACD exists only where both EMAs do, which is where the slow one starts.
     macd: list[Decimal | None] = [
@@ -232,6 +294,9 @@ def compute_indicators(bars: Sequence[Bar]) -> list[IndicatorSet]:
                 macd_histogram=_quantize(histogram),
                 atr_14=_quantize(atr[i]),
                 volume_sma_20=_quantize(volume_sma[i]),
+                change_percent_1d=_quantize(change_percent[i]),
+                high_52w=_quantize(high_52w[i]),
+                low_52w=_quantize(low_52w[i]),
             )
         )
     return rows

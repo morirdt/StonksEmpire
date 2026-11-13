@@ -51,8 +51,9 @@ class ResourceCase:
 
 
 # ---------------------------------------------------------------------------
-# Later phases append here. Phase 2: watchlists. Phase 5: alerts. Phase 6:
-# trades and executions. Keep one entry per method that touches a user's row.
+# Later phases append here. Phase 2: watchlists. Phase 4: screener presets.
+# Phase 5: alerts. Phase 6: trades and executions. Keep one entry per method
+# that touches a user's row.
 # ---------------------------------------------------------------------------
 CROSS_USER_RESOURCES: list[ResourceCase] = [
     # Phase 2 — watchlists. Every method that names another user's row.
@@ -75,6 +76,17 @@ CROSS_USER_RESOURCES: list[ResourceCase] = [
         body={"item_ids": ["00000000-0000-7000-8000-000000000000"]},
     ),
     ResourceCase("DELETE", "/api/v1/watchlists/{watchlist_id}/items/{item_id}"),
+    # Phase 4 — screener presets. All four paths that take an id. The run
+    # endpoint is here rather than in CALLER_SCOPED_RESOURCES because it names
+    # somebody else's preset by id, which is the forge-an-id shape.
+    ResourceCase("GET", "/api/v1/screener/presets/{preset_id}"),
+    ResourceCase(
+        "PATCH",
+        "/api/v1/screener/presets/{preset_id}",
+        body={"name": "hijacked"},
+    ),
+    ResourceCase("DELETE", "/api/v1/screener/presets/{preset_id}"),
+    ResourceCase("POST", "/api/v1/screener/presets/{preset_id}/run", body={}),
 ]
 
 
@@ -138,7 +150,7 @@ async def other_users_rows(
     client: AsyncClient,
     seeded_symbols: list[Symbol],
 ) -> dict[str, str]:
-    """A watchlist with one item, owned by somebody who is not the caller.
+    """A watchlist with one item and a screener preset, owned by somebody else.
 
     Built through the API rather than the session, so the ids are exactly what
     a real client would hold — and so a scoping bug in creation shows up here
@@ -162,7 +174,21 @@ async def other_users_rows(
     )
     assert item.status_code == 201, item.text
 
-    return {"watchlist_id": watchlist_id, "item_id": item.json()["id"]}
+    preset = await client.post(
+        "/api/v1/screener/presets",
+        json={
+            "name": "Private screen",
+            "filters": {"kind": "numeric", "field": "close", "op": "gt", "value": "1"},
+        },
+        headers=headers,
+    )
+    assert preset.status_code == 201, preset.text
+
+    return {
+        "watchlist_id": watchlist_id,
+        "item_id": item.json()["id"],
+        "preset_id": preset.json()["id"],
+    }
 
 
 @pytest.mark.skipif(

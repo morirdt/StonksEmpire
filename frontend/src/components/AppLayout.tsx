@@ -41,6 +41,7 @@ function MainNav() {
       {[
         { to: '/', label: 'Dashboard', end: true },
         { to: '/watchlists', label: 'Watchlists', end: false },
+        { to: '/screener', label: 'Screener', end: false },
       ].map((link) => (
         <Button
           key={link.to}

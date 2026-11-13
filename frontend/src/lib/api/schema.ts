@@ -156,6 +156,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/screener/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The catalogue of screenable fields
+         * @description What the filter builder is generated from.
+         *
+         *     Served from the same registry the compiler resolves against, so the UI
+         *     cannot offer a field the compiler will reject. The frontend deliberately
+         *     keeps no copy of this list.
+         */
+        get: operations["screener_screener_fields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/screener/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your saved screens
+         * @description Names and timestamps only — the stored trees are deliberately not parsed.
+         *
+         *     A preset naming a field that a later phase removed would otherwise take the
+         *     whole screener page down with it. It fails when it is opened or run, which
+         *     is where a user can do something about it.
+         */
+        get: operations["screener_list_presets"];
+        put?: never;
+        /**
+         * Save a screen
+         * @description 409 when the name is already taken — names are unique per user.
+         */
+        post: operations["screener_create_preset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/screener/presets/{preset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a saved screen */
+        get: operations["screener_get_preset"];
+        put?: never;
+        post?: never;
+        /** Delete a saved screen */
+        delete: operations["screener_delete_preset"];
+        options?: never;
+        head?: never;
+        /** Rename a screen or replace its filters */
+        patch: operations["screener_update_preset"];
+        trace?: never;
+    };
+    "/api/v1/screener/presets/{preset_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a saved screen
+         * @description Runs what is stored, not what the client says is stored.
+         *
+         *     This exists instead of making the client fetch-then-post: it is the primary
+         *     path from the UI, it halves the round trips, and it removes the window in
+         *     which a client can run something subtly different from what is saved under
+         *     that name.
+         */
+        post: operations["screener_run_preset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/screener/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an ad-hoc screen
+         * @description An unknown field, an unknown operator, or a unit-mismatched comparison is
+         *     a 422 raised by the schema before this function is called.
+         */
+        post: operations["screener_run_screen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/symbols": {
         parameters: {
             query?: never;
@@ -425,6 +542,28 @@ export interface components {
             ticker: string;
         };
         /**
+         * CategoryFilter
+         * @description ``column IN (…)`` / ``NOT IN (…)`` over a label field.
+         */
+        CategoryFilter: {
+            /** Field */
+            field: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "category";
+            op: components["schemas"]["CategoryOperator"];
+            /** Values */
+            values: string[];
+        };
+        /**
+         * CategoryOperator
+         * @description Set membership, for fields whose values are labels rather than numbers.
+         * @enum {string}
+         */
+        CategoryOperator: "in" | "not_in";
+        /**
          * ChartPreferencesRequest
          * @description A full replacement, not a patch — every field is required.
          *
@@ -466,6 +605,95 @@ export interface components {
          * @enum {string}
          */
         ChartRange: "1M" | "3M" | "6M" | "1Y" | "2Y" | "MAX";
+        /**
+         * CompareFilter
+         * @description ``column <op> column`` — the point of the whole feature.
+         *
+         *     "Price above its 200-day average" is a comparison between two columns, not
+         *     between a column and a number. A DSL that only supports ``field op literal``
+         *     looks complete and cannot express it.
+         *
+         *     Both sides must share a unit. ``close > volume`` parses fine and means
+         *     nothing, so a mismatch is a 422 naming both units rather than a screen that
+         *     silently returns whatever the numbers happen to do.
+         */
+        CompareFilter: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "compare";
+            /** Left */
+            left: string;
+            op: components["schemas"]["CompareOperator"];
+            /** Right */
+            right: string;
+        };
+        /**
+         * CompareOperator
+         * @description Comparisons between two fields.
+         *
+         *     Deliberately a separate enum rather than a subset of ``NumericOperator``:
+         *     ``between`` has no meaning here, and an enum that has to be range-checked
+         *     after parsing is not doing its job.
+         * @enum {string}
+         */
+        CompareOperator: "gt" | "gte" | "lt" | "lte" | "eq" | "neq";
+        /**
+         * FieldUnit
+         * @description What a screener field is measured in.
+         *
+         *     This exists to stop ``close > volume``, which parses fine and means nothing.
+         *     A ``compare`` node is rejected unless both sides share a unit, so the
+         *     registry has to carry one per field.
+         * @enum {string}
+         */
+        FieldUnit: "price" | "shares" | "percent" | "ratio" | "text";
+        /**
+         * FilterKind
+         * @description The node kinds a screener filter tree is built from.
+         *
+         *     Also the vocabulary the field registry uses to say what a field may appear
+         *     in: ``close`` is ``numeric`` and ``compare``, ``exchange`` is ``category``
+         *     only, and ``ticker`` is none of them — it is sortable and displayed, but
+         *     filtering on it is what the symbol search is for.
+         * @enum {string}
+         */
+        FilterKind: "numeric" | "compare" | "category" | "group";
+        /**
+         * GroupFilter
+         * @description ``AND`` / ``OR`` over children. Nesting is what supplies precedence.
+         */
+        "GroupFilter-Input": {
+            /** Children */
+            children: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"])[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            op: components["schemas"]["GroupOperator"];
+        };
+        /**
+         * GroupFilter
+         * @description ``AND`` / ``OR`` over children. Nesting is what supplies precedence.
+         */
+        "GroupFilter-Output": {
+            /** Children */
+            children: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Output"])[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            op: components["schemas"]["GroupOperator"];
+        };
+        /**
+         * GroupOperator
+         * @description How a group combines its children. Nesting is what supplies precedence.
+         * @enum {string}
+         */
+        GroupOperator: "and" | "or";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -548,6 +776,36 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * NumericFilter
+         * @description ``column <op> :value`` — the ordinary case.
+         */
+        NumericFilter: {
+            /** Field */
+            field: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "numeric";
+            op: components["schemas"]["NumericOperator"];
+            /**
+             * Value
+             * @description A decimal, as a string — never a JSON number.
+             */
+            value: string;
+            /** Value2 */
+            value2?: string | null;
+        };
+        /**
+         * NumericOperator
+         * @description Comparisons between a field and a literal value.
+         *
+         *     ``BETWEEN`` is here and not on ``CompareOperator`` because it takes a second
+         *     operand, which only makes sense against literals.
+         * @enum {string}
+         */
+        NumericOperator: "gt" | "gte" | "lt" | "lte" | "eq" | "neq" | "between";
         /**
          * Oscillator
          * @description Indicators that get a pane of their own, because their scale is not price.
@@ -652,6 +910,220 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * ScreenerColumn
+         * @description A column of the results table, in display order.
+         */
+        ScreenerColumn: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            unit: components["schemas"]["FieldUnit"];
+        };
+        /**
+         * ScreenerFieldResponse
+         * @description One entry of the catalogue the filter builder is generated from.
+         */
+        ScreenerFieldResponse: {
+            /** Key */
+            key: string;
+            /** Kinds */
+            kinds: components["schemas"]["FilterKind"][];
+            /** Label */
+            label: string;
+            unit: components["schemas"]["FieldUnit"];
+            /** Values */
+            values?: string[];
+        };
+        /** ScreenerFieldsResponse */
+        ScreenerFieldsResponse: {
+            default_sort: components["schemas"]["ScreenerSort"];
+            /** Fields */
+            fields: components["schemas"]["ScreenerFieldResponse"][];
+            /**
+             * Max Depth
+             * @default 3
+             */
+            max_depth: number;
+            /**
+             * Max Limit
+             * @default 200
+             */
+            max_limit: number;
+            /**
+             * Max Nodes
+             * @default 25
+             */
+            max_nodes: number;
+            /** Sort Fields */
+            sort_fields: string[];
+        };
+        /** ScreenerPresetCreateRequest */
+        ScreenerPresetCreateRequest: {
+            /** Filters */
+            filters: components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"];
+            /** Name */
+            name: string;
+            sort?: components["schemas"]["ScreenerSort"];
+        };
+        /** ScreenerPresetResponse */
+        ScreenerPresetResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Filters */
+            filters: components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Output"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            sort: components["schemas"]["ScreenerSort"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ScreenerPresetRunRequest
+         * @description Overrides for a saved preset's run. The saved filters are not negotiable.
+         */
+        ScreenerPresetRunRequest: {
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+        };
+        /**
+         * ScreenerPresetSummary
+         * @description What the list page shows — deliberately **without** the filter tree.
+         *
+         *     A stored tree can go stale: if a later phase removes an indicator column, a
+         *     preset naming it no longer validates. The list must still load, so it never
+         *     parses ``filters``. Opening or running the preset is where validation
+         *     happens, and where a stale one fails with a message naming the field.
+         */
+        ScreenerPresetSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ScreenerPresetUpdateRequest
+         * @description A patch: everything is optional, and an omitted field is left alone.
+         */
+        ScreenerPresetUpdateRequest: {
+            /** Filters */
+            filters?: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"]) | null;
+            /** Name */
+            name?: string | null;
+            sort?: components["schemas"]["ScreenerSort"] | null;
+        };
+        /**
+         * ScreenerRow
+         * @description One match: the symbol, plus the numbers that caused it to match.
+         *
+         *     The identity is flat and the numbers are a map, because which numbers are
+         *     present depends on the run — a row carries the fixed core plus every field
+         *     the filters or the sort referenced, so a user can see *why* a symbol is
+         *     there without opening it. ``columns`` on the response says what to render
+         *     and in what order.
+         *
+         *     Every value is a ``Decimal``, so it crosses the wire as a string and is
+         *     parsed only at the point of display. See ``CLAUDE.md``.
+         */
+        ScreenerRow: {
+            /** Asset Type */
+            asset_type: string;
+            /** Exchange */
+            exchange: string | null;
+            /** Name */
+            name: string;
+            /** Ticker */
+            ticker: string;
+            /** Values */
+            values: {
+                [key: string]: string | null;
+            };
+        };
+        /**
+         * ScreenerRunRequest
+         * @description An ad-hoc screen.
+         *
+         *     ``POST`` for a read: a filter tree does not fit in a query string legibly,
+         *     and URL-encoding JSON into a ``GET`` trades a readable body for an
+         *     unreadable URL and a length limit. The lost HTTP caching is not a cost here
+         *     — the underlying data changes once a day.
+         */
+        ScreenerRunRequest: {
+            /** Filters */
+            filters: components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"];
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+            sort?: components["schemas"]["ScreenerSort"];
+        };
+        /**
+         * ScreenerRunResponse
+         * @description The result of one run.
+         *
+         *     ``as_of`` is ``null`` only when ``daily_bars`` is empty — a fresh clone that
+         *     has not been backfilled. The UI has a distinct empty state for it, because
+         *     "the universe is empty" would otherwise be diagnosed as "nothing matched".
+         *
+         *     ``total_matched`` is the count **before** the row cap, so the UI can say
+         *     "412 matches, showing 100" — which is the signal that a screen is too loose.
+         */
+        ScreenerRunResponse: {
+            /** As Of */
+            as_of: string | null;
+            /** Columns */
+            columns: components["schemas"]["ScreenerColumn"][];
+            /** Rows */
+            rows: components["schemas"]["ScreenerRow"][];
+            /** Total Matched */
+            total_matched: number;
+            /** Universe Size */
+            universe_size: number;
+        };
+        /** ScreenerSort */
+        ScreenerSort: {
+            /** @default asc */
+            direction: components["schemas"]["SortDirection"];
+            /**
+             * Field
+             * @default ticker
+             */
+            field: string;
+        };
+        /**
+         * SortDirection
+         * @enum {string}
+         */
+        SortDirection: "asc" | "desc";
         /**
          * SymbolResponse
          * @description One instrument in the universe.
@@ -1067,6 +1539,242 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuotesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_screener_fields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerFieldsResponse"];
+                };
+            };
+        };
+    };
+    screener_list_presets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerPresetSummary"][];
+                };
+            };
+        };
+    };
+    screener_create_preset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerPresetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerPresetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_get_preset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerPresetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_delete_preset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_update_preset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerPresetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerPresetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_run_preset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ScreenerPresetRunRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_run_screen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenerRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerRunResponse"];
                 };
             };
             /** @description Validation Error */

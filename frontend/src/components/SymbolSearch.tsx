@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useSymbolSearch, type Symbol } from '../api/useSymbolSearch';
+import { useSymbolSearch, type Symbol } from './useSymbolSearch';
 
 interface SymbolSearchProps {
   onSelect: (symbol: Symbol) => void;
@@ -17,9 +17,11 @@ interface SymbolSearchProps {
 /**
  * Type-ahead over the symbol universe.
  *
- * Lives in its own feature rather than inside `watchlists` because Phase 3's
- * symbol detail page needs the same control, and features may not import each
- * other — shared code moves up, it does not get reached across for.
+ * Lives in `components/` rather than in a feature because more than one feature
+ * wants it — watchlists today, and the rule is that features may not import
+ * each other, so shared code moves up rather than getting reached across for.
+ * `useSymbolSearch` comes with it: the hook has no other consumer, so it is an
+ * implementation detail of this control rather than part of any feature's API.
  *
  * Tickers already on the list are shown greyed out rather than filtered away:
  * a symbol vanishing from search results reads as "not found", which is a

@@ -192,6 +192,56 @@ Settled in Phase 3. Everything that draws a chart after it depends on these.
   the readout is currently the only non-visual path to the data — worth
   revisiting in Phase 7's accessibility pass.
 
+### Screener conventions
+
+Settled in Phase 4. Anything that turns user input into a query after it
+depends on these.
+
+- **No user-supplied string ever reaches SQL.** A filter names a field by key;
+  `app/services/screener/fields.py` resolves the key to a real SQLAlchemy
+  expression, and an unknown key, operator, or unit-mismatched comparison is a
+  422 from `app/schemas/screener.py` before any service runs. Operators map to
+  Python's `operator` functions, never to strings near a query.
+- **The field registry is the only list of what is screenable**, and it feeds
+  both the compiler and `GET /screener/fields`. The frontend keeps no copy —
+  the filter builder is generated from that endpoint, so a new column appears
+  in the UI without a frontend change. A registry entry may declare *no* filter
+  kinds (`ticker`, `name`): it is then sortable and displayed but not
+  filterable.
+- **Numeric operands cross the wire as strings and a JSON number is a 422**,
+  not a coercion. `100.10` parsed as a float is `100.09999999999999`, which is
+  the bug the `Decimal` convention exists to prevent. The OpenAPI schema says
+  `string` for exactly this reason.
+- **A recursive schema needs a ceiling**: depth 3, 25 nodes, 50 category
+  values, enforced by one walk in the schema layer so the limit is a 422 and
+  never an `OperationalError`. Test any new cap at the boundary and one past it.
+- **Nulls do not match, and must never be `COALESCE`d.** `close > sma_200` is
+  `NULL` for a symbol with too little history, so it drops out — correctly.
+  Make it *visible* through `universe_size`, not true through a fabricated
+  number. The same applies to `neq` and `NOT IN`, which are not the complements
+  people expect. Indicators join with a **LEFT JOIN** for the same reason.
+- **One shared `as_of` per run**, `max(trade_date)` over `daily_bars`, and
+  never `latest_quotes` — that table is a TTL cache of whatever someone happened
+  to look at. A symbol with no bar on `as_of` is outside the universe for that
+  run rather than compared against a stale row.
+- **Anything needing more than one row per symbol is an indicator column, not a
+  window function in a screen.** A derived value that exists only inside one
+  query lets the chart and the screen disagree about the same symbol.
+- **The 52-week window is 252 bars, not 252 calendar days**, unlike
+  `ChartRange`, which is calendar-based because a toolbar label promises
+  calendar time. Both are right for their own job; say so in the comment.
+- **`total_matched` is the pre-cap count and there is no pagination.** A screen
+  returning 412 of 530 wants narrowing, not a second page — so sorting is
+  server-side, because re-ordering the returned hundred would present a hundred
+  of four hundred matches as the top hundred.
+- **Both bar tables carry a `trade_date`-only index.** Their primary key leads
+  with `symbol_id`, which serves every per-symbol query and cannot serve the
+  screener. `EXPLAIN` any new whole-universe query rather than assuming.
+- **A stored filter tree is validated on the way out as well as in.** `JSONB`
+  enforces nothing, so the preset *listing* deliberately does not parse trees —
+  one preset naming a removed column must not take the page down — while
+  opening or running one is a 422 naming the offending field.
+
 ### Testing conventions
 
 - Database tests live in `tests/integration/` and use the fixtures in its

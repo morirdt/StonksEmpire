@@ -5,9 +5,11 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 # Docker Desktop on Windows exposes `docker.exe` to WSL even when the WSL
-# integration is switched off. Prefer the native binary, fall back to the
-# Windows one, so `make up` works in both setups.
-DOCKER := $(shell command -v docker 2>/dev/null || command -v docker.exe 2>/dev/null || echo docker)
+# integration is switched off -- and puts a stub `docker` on PATH that only
+# prints advice, so test that `docker` runs rather than that it exists. Emit the
+# bare name, never `command -v`'s path: it lives under `Program Files`, and Make
+# splits a recipe at the space.
+DOCKER := $(shell if docker --version >/dev/null 2>&1; then echo docker; elif command -v docker.exe >/dev/null 2>&1; then echo docker.exe; else echo docker; fi)
 COMPOSE := $(DOCKER) compose
 
 BACKEND := backend
