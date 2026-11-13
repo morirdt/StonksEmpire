@@ -273,6 +273,13 @@ Scheduling arrives with the Phase 5 worker; running an unbounded backfill from a
 - `src/features/watchlists/` with `api/`, `components/`, `routes/`.
 - `src/features/symbols/` for the search box — separate feature because Phase 3's
   symbol detail page will use it too, and features may not import each other.
+
+  > **Corrected after Phase 4.** This does not follow: a second feature reaching
+  > into `features/symbols` is still a cross-feature import, which is what the
+  > rule forbids. `watchlists` did exactly that for three phases. `SymbolSearch`
+  > and its `useSymbolSearch` hook now live in `src/components/`, which is what
+  > "shared code moves up" meant. Phase 3's detail page never used it, so the
+  > anticipated second consumer was hypothetical anyway.
 - Quote grid with `@mui/x-data-grid`: `tabular-nums`, `profit`/`loss` palette
   tokens for change columns — never green/red literals.
 - Polling via TanStack Query `refetchInterval`, roughly the quote TTL, and

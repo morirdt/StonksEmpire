@@ -7,7 +7,7 @@ import CardContent from '@mui/material/CardContent';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { SymbolSearch } from '@/features/symbols/components/SymbolSearch';
+import { SymbolSearch } from '@/components/SymbolSearch';
 import { ApiError } from '@/lib/api/client';
 import { QuoteGrid } from '../components/QuoteGrid';
 import { WatchlistPicker } from '../components/WatchlistPicker';
