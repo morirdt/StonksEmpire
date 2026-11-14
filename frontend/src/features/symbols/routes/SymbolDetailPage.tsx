@@ -135,6 +135,15 @@ export function SymbolDetailPage() {
           {symbol.data.name}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
+        {/* A link, not an import: features/symbols may not import features/alerts. */}
+        <Button
+          size="small"
+          variant="outlined"
+          component={RouterLink}
+          to={`/alerts/new?ticker=${encodeURIComponent(symbol.data.ticker)}`}
+        >
+          Create alert
+        </Button>
         <Link component={RouterLink} to="/watchlists" variant="body2">
           Back to watchlists
         </Link>

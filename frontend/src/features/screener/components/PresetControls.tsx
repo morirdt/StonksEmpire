@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router';
+import DialogContentText from '@mui/material/DialogContentText';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -42,6 +45,9 @@ export function PresetControls({
 }: PresetControlsProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const selected = presets.find((preset) => preset.id === selectedId) ?? null;
+  const alertCount = selected?.alert_count ?? 0;
 
   const save = () => {
     const trimmed = name.trim();
@@ -76,21 +82,56 @@ export function PresetControls({
         </Select>
 
         {selectedId && (
-          <Tooltip title="Delete this saved screen">
-            <IconButton
+          <>
+            <Tooltip title="Delete this saved screen">
+              <IconButton
+                size="small"
+                onClick={() => setConfirmingDelete(true)}
+                aria-label="Delete screen"
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            {/* A link, not an import: features/screener may not import features/alerts. */}
+            <Button
               size="small"
-              onClick={() => onDelete(selectedId)}
-              aria-label="Delete screen"
+              startIcon={<NotificationsActiveIcon fontSize="small" />}
+              component={RouterLink}
+              to={`/alerts/new?preset=${selectedId}`}
             >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+              Alert on new matches
+            </Button>
+          </>
         )}
 
         <Button size="small" onClick={() => setDialogOpen(true)} disabled={!canSave}>
           Save as…
         </Button>
       </Stack>
+
+      <Dialog open={confirmingDelete} onClose={() => setConfirmingDelete(false)} maxWidth="xs">
+        <DialogTitle>Delete “{selected?.name}”?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {alertCount === 0
+              ? 'This screen will be deleted.'
+              : `This screen and the ${alertCount === 1 ? 'alert' : `${alertCount} alerts`} watching it will be deleted.`}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmingDelete(false)}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              setConfirmingDelete(false);
+              if (selectedId) onDelete(selectedId);
+            }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Save this screen</DialogTitle>

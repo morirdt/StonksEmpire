@@ -12,7 +12,7 @@ import {
   toNumber,
 } from '@/lib/format';
 import type { ScreenerColumn, ScreenerRow } from '../api/useScreener';
-import type { ScreenerSort } from '../lib/filterTree';
+import type { ScreenerSort } from '@/components/filter-builder/filterTree';
 
 /**
  * One flattened grid row: the identity columns, then a value per referenced

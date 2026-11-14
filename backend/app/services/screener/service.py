@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import FieldUnit, FilterKind, SortDirection
 from app.core.exceptions import ConflictError, NotFoundError
+from app.models.alert import Alert
 from app.models.market_data import DailyBar, DailyIndicator
 from app.models.screener import ScreenerPreset
 from app.models.symbol import Symbol
@@ -284,6 +285,15 @@ class ScreenerService:
             .order_by(ScreenerPreset.created_at.desc(), ScreenerPreset.id.desc())
         )
         return list(result.scalars())
+
+    async def alert_counts(self, user_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        """Screen alerts per preset, for the delete confirmation."""
+        result = await self._session.execute(
+            select(Alert.preset_id, func.count())
+            .where(Alert.user_id == user_id, Alert.preset_id.is_not(None))
+            .group_by(Alert.preset_id)
+        )
+        return {preset_id: count for preset_id, count in result.tuples() if preset_id is not None}
 
     async def get_preset(self, user_id: uuid.UUID, preset_id: uuid.UUID) -> ScreenerPreset:
         """One preset, or 404 — including when it belongs to someone else."""

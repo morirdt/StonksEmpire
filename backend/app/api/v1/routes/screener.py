@@ -24,6 +24,7 @@ from app.models.screener import ScreenerPreset
 from app.schemas.screener import (
     ScreenerFieldsResponse,
     ScreenerPresetCreateRequest,
+    ScreenerPresetListItem,
     ScreenerPresetResponse,
     ScreenerPresetRunRequest,
     ScreenerPresetSummary,
@@ -76,18 +77,26 @@ async def run_screen(
 
 @router.get(
     "/presets",
-    response_model=list[ScreenerPresetSummary],
+    response_model=list[ScreenerPresetListItem],
     summary="Your saved screens",
 )
-async def list_presets(session: DbSession, user: CurrentUser) -> list[ScreenerPresetSummary]:
+async def list_presets(session: DbSession, user: CurrentUser) -> list[ScreenerPresetListItem]:
     """Names and timestamps only — the stored trees are deliberately not parsed.
 
     A preset naming a field that a later phase removed would otherwise take the
     whole screener page down with it. It fails when it is opened or run, which
     is where a user can do something about it.
     """
-    presets = await ScreenerService(session).list_presets(user.id)
-    return [ScreenerPresetSummary.model_validate(p) for p in presets]
+    service = ScreenerService(session)
+    presets = await service.list_presets(user.id)
+    counts = await service.alert_counts(user.id)
+    return [
+        ScreenerPresetListItem(
+            **ScreenerPresetSummary.model_validate(p).model_dump(),
+            alert_count=counts.get(p.id, 0),
+        )
+        for p in presets
+    ]
 
 
 @router.post(

@@ -1,9 +1,12 @@
 import { createBrowserRouter } from 'react-router';
 import { AppLayout } from '@/components/AppLayout';
+import { AlertHistoryPage } from '@/features/alerts/routes/AlertHistoryPage';
+import { AlertsPage } from '@/features/alerts/routes/AlertsPage';
 import { NotFoundPage } from '@/components/NotFoundPage';
 import { AuthGuard } from '@/features/auth/components/AuthGuard';
 import { LoginPage } from '@/features/auth/routes/LoginPage';
 import { RegisterPage } from '@/features/auth/routes/RegisterPage';
+import { NotificationsPage } from '@/features/notifications/routes/NotificationsPage';
 import { ScreenerPage } from '@/features/screener/routes/ScreenerPage';
 import { SymbolDetailPage } from '@/features/symbols/routes/SymbolDetailPage';
 import { DashboardPage } from '@/features/system/routes/DashboardPage';
@@ -30,6 +33,12 @@ export const router = createBrowserRouter([
           { path: 'watchlists', element: <WatchlistsPage /> },
           { path: 'screener', element: <ScreenerPage /> },
           { path: 'symbols/:ticker', element: <SymbolDetailPage /> },
+          { path: 'alerts', element: <AlertsPage /> },
+          // The create dialog has its own URL so other features can link to it,
+          // prefilled with ?ticker= or ?preset=, without importing this one.
+          { path: 'alerts/new', element: <AlertsPage creating /> },
+          { path: 'alerts/:alertId', element: <AlertHistoryPage /> },
+          { path: 'notifications', element: <NotificationsPage /> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

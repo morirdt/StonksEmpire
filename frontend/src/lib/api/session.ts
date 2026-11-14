@@ -12,16 +12,36 @@
 
 let accessToken: string | null = null;
 let onUnauthenticated: (() => void) | null = null;
+const listeners = new Set<(token: string | null) => void>();
+
+function notify() {
+  for (const listener of listeners) listener(accessToken);
+}
 
 export const session = {
   getAccessToken: (): string | null => accessToken,
 
   setAccessToken(token: string | null) {
+    if (token === accessToken) return;
     accessToken = token;
+    notify();
   },
 
   clear() {
+    if (accessToken === null) return;
     accessToken = null;
+    notify();
+  },
+
+  /**
+   * Called with the new token whenever it changes, including to `null`.
+   *
+   * The realtime socket uses this to re-authenticate after every refresh, so a
+   * socket never outlives the token it was opened with. Returns the unsubscribe.
+   */
+  onChange(listener: (token: string | null) => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   },
 
   /**

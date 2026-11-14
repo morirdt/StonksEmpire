@@ -17,12 +17,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { queryKeys } from '@/lib/queryKeys';
 import type { components } from '@/lib/api/schema';
-import { filterTreeKey, type FilterNode, type ScreenerSort } from '../lib/filterTree';
+import {
+  filterTreeKey,
+  type FilterNode,
+  type ScreenerSort,
+} from '@/components/filter-builder/filterTree';
 
 export type ScreenerRunResponse = components['schemas']['ScreenerRunResponse'];
 export type ScreenerColumn = components['schemas']['ScreenerColumn'];
 export type ScreenerRow = components['schemas']['ScreenerRow'];
-export type PresetSummary = components['schemas']['ScreenerPresetSummary'];
+export type PresetSummary = components['schemas']['ScreenerPresetListItem'];
 export type Preset = components['schemas']['ScreenerPresetResponse'];
 
 /** The catalogue moves when a migration does, so an hour is conservative. */

@@ -70,10 +70,13 @@ async function readProblemDetail(response: Response): Promise<ProblemDetail | nu
  * an already-spent token — which the backend correctly reads as theft and
  * punishes by killing the whole session family. One shared promise is not an
  * optimisation here; it is what stops the app logging itself out.
+ *
+ * Exported for the realtime socket, whose 4401 close must join this same
+ * promise rather than start a refresh of its own.
  */
 let inFlightRefresh: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   inFlightRefresh ??= (async () => {
     try {
       const response = await fetch(REFRESH_URL, {

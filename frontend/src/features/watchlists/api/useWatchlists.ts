@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { queryKeys } from '@/lib/queryKeys';
+import { useRealtimeConnected } from '@/lib/realtime/useRealtime';
 import type { components } from '@/lib/api/schema';
 
 export type Watchlist = components['schemas']['WatchlistResponse'];
@@ -8,11 +9,15 @@ export type WatchlistRow = components['schemas']['WatchlistRowResponse'];
 export type WatchlistDetail = components['schemas']['WatchlistDetailResponse'];
 
 /**
- * How often the grid re-polls, in milliseconds.
+ * How often the grid re-polls, in milliseconds, **while the socket is down**.
  *
  * Matched to the backend's quote TTL: polling faster than the TTL just serves
- * the same cached row again, so it costs a round trip and buys nothing. Phase 5
- * replaces this with a WebSocket and the interval goes away.
+ * the same cached row again, so it costs a round trip and buys nothing.
+ *
+ * While the realtime socket is up, the grid does not poll at all: the worker's
+ * `quotes_updated` push invalidates it seconds after each poll on the server.
+ * The interval stays as the fallback rather than being deleted, so the grid
+ * keeps moving when Redis, the socket, or the network is down.
  */
 export const GRID_POLL_INTERVAL_MS = 60_000;
 
@@ -29,15 +34,17 @@ export function useWatchlists() {
 /**
  * The quote grid for one list.
  *
- * Polling pauses when the tab is hidden. Leaving it running would spend the
- * provider quota on a screen nobody is looking at, and every background tab
- * would keep doing so all day.
+ * Pushed while the socket is up; polled, every `GRID_POLL_INTERVAL_MS`, while
+ * it is not. Polling pauses when the tab is hidden. Leaving it running would
+ * spend the provider quota on a screen nobody is looking at, and every
+ * background tab would keep doing so all day.
  */
 export function useWatchlistGrid(watchlistId: string | undefined) {
+  const pushed = useRealtimeConnected();
   return useQuery({
     queryKey: queryKeys.watchlists.grid(watchlistId ?? ''),
     enabled: Boolean(watchlistId),
-    refetchInterval: GRID_POLL_INTERVAL_MS,
+    refetchInterval: pushed ? false : GRID_POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
     queryFn: async () => {
       const { data } = await api.GET('/api/v1/watchlists/{watchlist_id}/quotes', {

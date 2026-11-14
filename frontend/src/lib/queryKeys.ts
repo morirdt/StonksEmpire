@@ -48,6 +48,22 @@ export const queryKeys = {
     presets: () => ['screener', 'presets'] as const,
     preset: (id: string) => ['screener', 'preset', id] as const,
   },
+  alerts: {
+    all: () => ['alerts'] as const,
+    list: () => ['alerts', 'list'] as const,
+    detail: (id: string) => ['alerts', 'detail', id] as const,
+    triggers: (id: string) => ['alerts', 'triggers', id] as const,
+    // Two registries: intraday swaps bar fields for live ones.
+    fields: (kind: string) => ['alerts', 'fields', kind] as const,
+  },
+  notifications: {
+    // A `notification_created` push invalidates this whole prefix: the list,
+    // the unread view, and the badge count all change together.
+    all: () => ['notifications'] as const,
+    list: (unreadOnly: boolean) => ['notifications', 'list', unreadOnly] as const,
+    recent: () => ['notifications', 'recent'] as const,
+    unreadCount: () => ['notifications', 'unread-count'] as const,
+  },
   watchlists: {
     all: () => ['watchlists'] as const,
     list: () => ['watchlists', 'list'] as const,

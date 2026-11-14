@@ -334,6 +334,9 @@ async def test_deleting_a_preset_deletes_its_screen_alerts(
         auth_client, kind="screen", ticker=None, preset_id=preset.json()["id"]
     )
 
+    (listed,) = (await auth_client.get("/api/v1/screener/presets")).json()
+    assert listed["alert_count"] == 1, "the delete confirmation can say what goes with it"
+
     await auth_client.delete(f"/api/v1/screener/presets/{preset.json()['id']}")
 
     assert (await auth_client.get(f"/api/v1/alerts/{alert['id']}")).status_code == 404

@@ -1403,6 +1403,39 @@ export interface components {
             name: string;
             sort?: components["schemas"]["ScreenerSort"];
         };
+        /**
+         * ScreenerPresetListItem
+         * @description A row of the preset list.
+         *
+         *     ``alert_count`` is how many screen alerts watch this preset. Deleting the
+         *     preset deletes them too, and the confirmation says so. A count on the
+         *     listing, rather than the screener importing anything from the alerts
+         *     feature.
+         */
+        ScreenerPresetListItem: {
+            /**
+             * Alert Count
+             * @default 0
+             */
+            alert_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** ScreenerPresetResponse */
         ScreenerPresetResponse: {
             /**
@@ -1436,34 +1469,6 @@ export interface components {
              * @default 100
              */
             limit: number;
-        };
-        /**
-         * ScreenerPresetSummary
-         * @description What the list page shows — deliberately **without** the filter tree.
-         *
-         *     A stored tree can go stale: if a later phase removes an indicator column, a
-         *     preset naming it no longer validates. The list must still load, so it never
-         *     parses ``filters``. Opening or running the preset is where validation
-         *     happens, and where a stale one fails with a message naming the field.
-         */
-        ScreenerPresetSummary: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /**
          * ScreenerPresetUpdateRequest
@@ -2355,7 +2360,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScreenerPresetSummary"][];
+                    "application/json": components["schemas"]["ScreenerPresetListItem"][];
                 };
             };
         };

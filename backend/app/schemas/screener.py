@@ -476,6 +476,18 @@ class ScreenerPresetSummary(BaseModel):
     updated_at: datetime
 
 
+class ScreenerPresetListItem(ScreenerPresetSummary):
+    """A row of the preset list.
+
+    ``alert_count`` is how many screen alerts watch this preset. Deleting the
+    preset deletes them too, and the confirmation says so. A count on the
+    listing, rather than the screener importing anything from the alerts
+    feature.
+    """
+
+    alert_count: int = 0
+
+
 class ScreenerPresetResponse(ScreenerPresetSummary):
     filters: FilterNode
     sort: ScreenerSort

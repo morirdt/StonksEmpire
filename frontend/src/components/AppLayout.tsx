@@ -11,9 +11,11 @@ import { useColorScheme } from '@mui/material/styles';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import { NavLink, Outlet } from 'react-router';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAuthBootstrap } from '@/features/auth/api/useAuthBootstrap';
 import { useLogout } from '@/features/auth/api/useAuth';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { useRealtime } from '@/lib/realtime/useRealtime';
 
 function ColorSchemeToggle() {
   const { mode, setMode } = useColorScheme();
@@ -42,6 +44,7 @@ function MainNav() {
         { to: '/', label: 'Dashboard', end: true },
         { to: '/watchlists', label: 'Watchlists', end: false },
         { to: '/screener', label: 'Screener', end: false },
+        { to: '/alerts', label: 'Alerts', end: false },
       ].map((link) => (
         <Button
           key={link.to}
@@ -70,6 +73,7 @@ function AccountControls() {
 
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      <NotificationBell />
       <Typography variant="body2" color="text.secondary">
         {user.display_name ?? user.email}
       </Typography>
@@ -82,7 +86,9 @@ function AccountControls() {
 
 export function AppLayout() {
   // One silent refresh per app load, so a reload keeps the user signed in.
-  useAuthBootstrap();
+  const status = useAuthBootstrap();
+  // One realtime socket per tab, while signed in.
+  useRealtime(status === 'authenticated');
 
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default' }}>

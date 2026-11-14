@@ -9,7 +9,7 @@ import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ApiError } from '@/lib/api/client';
-import { FilterBuilder } from '../components/FilterBuilder';
+import { FilterBuilder } from '@/components/filter-builder/FilterBuilder';
 import { PresetControls } from '../components/PresetControls';
 import { ResultsTable } from '../components/ResultsTable';
 import {
@@ -28,7 +28,7 @@ import {
   type FilterRow,
   type GroupOperator,
   type ScreenerSort,
-} from '../lib/filterTree';
+} from '@/components/filter-builder/filterTree';
 
 const DEFAULT_SORT: ScreenerSort = { field: 'ticker', direction: 'asc' };
 const ROW_LIMIT = 100;

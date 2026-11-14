@@ -19,7 +19,7 @@ import {
   type FilterRow,
   type GroupOperator,
   type ScreenerField,
-} from '../lib/filterTree';
+} from './filterTree';
 
 interface FilterBuilderProps {
   fields: ScreenerField[];
@@ -28,15 +28,21 @@ interface FilterBuilderProps {
   onRowsChange: (rows: FilterRow[]) => void;
   onCombinatorChange: (op: GroupOperator) => void;
   disabled?: boolean;
+  /** What an empty builder says. Each caller knows what the filters are for. */
+  emptyText?: string;
 }
 
 /**
  * A field dropdown, built from the catalogue.
  *
- * There is no field list in this file. Everything offered here comes from
- * `GET /screener/fields`, which is the same registry the compiler resolves
- * against — so the builder cannot offer something the server will reject, and
- * a new column appears here without a frontend change.
+ * There is no field list in this file. Everything offered here comes from a
+ * catalogue endpoint — `GET /screener/fields` for a screen, or
+ * `GET /alerts/fields?kind=` for an alert condition — which is the same registry
+ * the compiler resolves against. So the builder cannot offer something the
+ * server will reject, and a new column appears here without a frontend change.
+ *
+ * It lives in `components/` because two features use it. The screener and the
+ * alerts dialog each pass in their own catalogue; neither imports the other.
  */
 function FieldSelect({
   value,
@@ -268,6 +274,7 @@ export function FilterBuilder({
   onRowsChange,
   onCombinatorChange,
   disabled,
+  emptyText = 'No filters yet. Add one to run a screen over the universe.',
 }: FilterBuilderProps) {
   const add = (kind: 'numeric' | 'compare' | 'category') => {
     const row = emptyRow(kind, fields);
@@ -301,7 +308,7 @@ export function FilterBuilder({
               response, and collapsing any pair of them into one sentence
               would hide the one whose fix is a command rather than a
               looser filter. */}
-          No filters yet. Add one to run a screen over the universe.
+          {emptyText}
         </Typography>
       ) : (
         <Stack spacing={1.5}>
