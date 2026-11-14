@@ -9,28 +9,63 @@ Adding a real provider means adding one entry to ``PROVIDERS`` below (with its
 HTTP mocked at the transport layer against recorded fixtures — no live network
 in tests, ever). If the new provider does not pass unchanged, the seam has
 leaked and the fix belongs in the provider, not here.
+
+Every provider is built with a clock, and the suite freezes it. "Today has no
+bar before the close" and "the 16:00 quote equals the bar" are contract, not
+``Fake`` trivia: they are what lets the nightly ingest and the last quote of the
+day agree about the same session.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from app.core.exceptions import NotFoundError
+from app.core.market_calendar import MARKET_TZ
 from app.integrations.market_data.base import MarketDataProvider
-from app.integrations.market_data.fake import FakeMarketDataProvider
+from app.integrations.market_data.fake import (
+    SESSION_MINUTES,
+    FakeMarketDataProvider,
+    intraday_path,
+)
 
-#: Every implementation under contract. One entry today; see the module docstring.
-PROVIDERS: dict[str, Callable[[], MarketDataProvider]] = {
-    "fake": FakeMarketDataProvider,
+
+class FrozenClock:
+    """A clock that says whatever the test last set it to."""
+
+    def __init__(self, at: datetime) -> None:
+        self.at = at
+
+    def __call__(self) -> datetime:
+        return self.at
+
+    def set_et(self, *args: int) -> None:
+        self.at = datetime(*args, tzinfo=MARKET_TZ).astimezone(UTC)  # type: ignore[misc]
+
+
+#: Every implementation under contract, built with a clock. One entry today;
+#: see the module docstring.
+PROVIDERS: dict[str, Callable[[FrozenClock], MarketDataProvider]] = {
+    "fake": lambda clock: FakeMarketDataProvider(clock=clock),
 }
+
+#: A Wednesday, mid-session. The fixture's default instant.
+SESSION_DAY = date(2026, 11, 18)
+
+
+@pytest.fixture
+def clock() -> FrozenClock:
+    frozen = FrozenClock(datetime(2026, 1, 1, tzinfo=UTC))
+    frozen.set_et(2026, 11, 18, 11, 0)
+    return frozen
 
 
 @pytest.fixture(params=sorted(PROVIDERS), ids=sorted(PROVIDERS))
-def provider(request: pytest.FixtureRequest) -> MarketDataProvider:
-    return PROVIDERS[request.param]()
+def provider(request: pytest.FixtureRequest, clock: FrozenClock) -> MarketDataProvider:
+    return PROVIDERS[request.param](clock)
 
 
 UNKNOWN_TICKER = "NOTAREALTICKER"
@@ -151,6 +186,120 @@ async def test_tickers_are_matched_case_insensitively(provider: MarketDataProvid
     quote = await provider.get_quote(ticker.lower())
 
     assert quote.ticker == ticker.upper()
+
+
+# ------------------------------------------------------------ time-dependent
+
+
+async def test_today_has_no_bar_before_the_close(
+    provider: MarketDataProvider, clock: FrozenClock
+) -> None:
+    ticker = (await provider.list_symbols())[0].ticker
+
+    clock.set_et(2026, 11, 18, 15, 59)
+    before = await provider.get_daily_bars(ticker, SESSION_DAY - timedelta(days=7), SESSION_DAY)
+    clock.set_et(2026, 11, 18, 16, 0)
+    after = await provider.get_daily_bars(ticker, SESSION_DAY - timedelta(days=7), SESSION_DAY)
+
+    assert before and before[-1].trade_date < SESSION_DAY
+    assert after[-1].trade_date == SESSION_DAY
+
+
+async def test_the_closing_quote_equals_the_bar(
+    provider: MarketDataProvider, clock: FrozenClock
+) -> None:
+    """Otherwise the last quote of the day and the stored bar disagree."""
+    ticker = (await provider.list_symbols())[0].ticker
+    clock.set_et(2026, 11, 18, 16, 0)
+
+    quote = await provider.get_quote(ticker)
+    (bar,) = await provider.get_daily_bars(ticker, SESSION_DAY, SESSION_DAY)
+
+    assert quote.price == bar.close
+    assert quote.day_open == bar.open
+    assert quote.day_high == bar.high
+    assert quote.day_low == bar.low
+    assert quote.volume == bar.volume
+
+
+async def test_an_intraday_quote_sits_inside_its_own_range(
+    provider: MarketDataProvider, clock: FrozenClock
+) -> None:
+    ticker = (await provider.list_symbols())[0].ticker
+
+    quote = await provider.get_quote(ticker)
+
+    assert quote.day_low is not None and quote.day_high is not None
+    assert quote.day_low <= quote.price <= quote.day_high
+
+
+class TestFakeIntradayPath:
+    """The path ``Fake`` walks through a session. Fake-only, like determinism."""
+
+    @pytest.fixture
+    async def bar_and_path(self) -> tuple[object, list[object]]:
+        provider = FakeMarketDataProvider(clock=lambda: datetime(2026, 11, 18, 22, 0, tzinfo=UTC))
+        (bar,) = await provider.get_daily_bars("AAPL", SESSION_DAY, SESSION_DAY)
+        return bar, intraday_path("AAPL", bar)
+
+    def test_the_path_starts_at_the_open_and_ends_at_the_close(self, bar_and_path) -> None:
+        bar, path = bar_and_path
+
+        assert len(path) == SESSION_MINUTES + 1
+        assert path[0].price == bar.open
+        assert path[-1].price == bar.close
+
+    def test_the_path_never_leaves_the_bar(self, bar_and_path) -> None:
+        bar, path = bar_and_path
+
+        assert all(bar.low <= p.price <= bar.high for p in path)
+        assert all(p.price == p.price.quantize(bar.close) for p in path), "cents only"
+
+    def test_the_running_extremes_reach_the_bar_by_the_close(self, bar_and_path) -> None:
+        bar, path = bar_and_path
+
+        assert (path[-1].day_high, path[-1].day_low, path[-1].volume) == (
+            bar.high,
+            bar.low,
+            bar.volume,
+        )
+        highs = [p.day_high for p in path]
+        assert highs == sorted(highs), "a running high never falls"
+
+    def test_the_price_actually_moves(self, bar_and_path) -> None:
+        """The whole reason for the path: a flat price cannot fire an alert."""
+        _, path = bar_and_path
+
+        assert len({p.price for p in path}) > 20
+
+    async def test_a_given_minute_is_deterministic(self, clock: FrozenClock) -> None:
+        clock.set_et(2026, 11, 18, 11, 17, 5)
+        first = await FakeMarketDataProvider(clock=clock).get_quote("AAPL")
+        clock.set_et(2026, 11, 18, 11, 17, 55)
+        second = await FakeMarketDataProvider(clock=clock).get_quote("AAPL")
+
+        assert first == second, "the same minute, so the same quote"
+
+    async def test_consecutive_minutes_differ_somewhere_in_the_day(
+        self, clock: FrozenClock
+    ) -> None:
+        provider = FakeMarketDataProvider(clock=clock)
+        prices = set()
+        for minute in range(0, 60, 5):
+            clock.set_et(2026, 11, 18, 10, minute)
+            prices.add((await provider.get_quote("AAPL")).price)
+
+        assert len(prices) > 1
+
+    async def test_before_the_open_the_quote_is_yesterdays_close(self, clock: FrozenClock) -> None:
+        provider = FakeMarketDataProvider(clock=clock)
+        clock.set_et(2026, 11, 18, 9, 0)
+
+        quote = await provider.get_quote("AAPL")
+        (yesterday,) = await provider.get_daily_bars("AAPL", date(2026, 11, 17), date(2026, 11, 17))
+
+        assert quote.price == yesterday.close
+        assert quote.quoted_at == datetime(2026, 11, 17, 21, 0, tzinfo=UTC)
 
 
 class TestFakeDeterminism:
