@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import utc_now
 from app.core.config import get_settings
 from app.core.enums import AlertKind, AlertStatus, TriggerMode
 from app.core.exceptions import NotFoundError, ValidationError
@@ -264,8 +265,12 @@ class AlertService:
         repository = AlertRepository(self._session)
         as_of = await shared_as_of(self._session)
         if kind is AlertKind.INTRADAY:
+            # Only a quote fresh enough for the grid to serve says anything
+            # about *now*. A days-old cached row would answer from a stale
+            # price, and that answer would become the alert's first state.
+            fresh_since = utc_now() - get_settings().market_data.quote_ttl
             state, _ = await repository.evaluate_intraday(
-                tree, symbol_id, fetched_since=None, indicators_as_of=as_of
+                tree, symbol_id, fetched_since=fresh_since, indicators_as_of=as_of
             )
             return state
         if as_of is None:

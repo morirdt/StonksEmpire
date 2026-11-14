@@ -8,7 +8,7 @@ mocked between the job and the database.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import get_settings
 from app.jobs.tasks.market_data import ingest_eod, poll_quotes, refresh_symbols
 from app.models.alert import Alert
-from app.models.market_data import DailyBar
+from app.models.market_data import DailyBar, LatestQuote
 from app.models.symbol import Symbol
 from app.models.user import User
 from app.services.alerts.firing import AlertEvaluator
@@ -501,3 +501,28 @@ async def test_the_database_rejects_a_half_formed_alert(
     )
     with pytest.raises(IntegrityError, match="ck_alerts_shape_matches_kind"):
         await db_session.flush()
+
+
+async def test_a_stale_quote_does_not_answer_condition_met_now(
+    session_factory: Factory,
+    db_session: AsyncSession,
+    auth_client: AsyncClient,
+    clock: FrozenClock,
+    seeded_symbols: list[Symbol],
+) -> None:
+    """Days-old prices say nothing about now, and must not seed the first state.
+
+    Found on the live stack: a cached quote above the threshold made a new alert
+    report `true` while the real price sat below it.
+    """
+    await create_alert(auth_client, condition=price_above("1"), name="warm-up")
+    await poll(session_factory, clock, (11, 0))
+    await db_session.execute(
+        update(LatestQuote).values(fetched_at=datetime(2026, 1, 1, tzinfo=UTC))
+    )
+    await db_session.commit()
+
+    alert = await create_alert(auth_client, condition=price_above("1"))
+
+    assert alert["condition_met_now"] is None
+    assert alert["last_state"] is None, "nothing definite was seen, so nothing is recorded"

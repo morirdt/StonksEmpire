@@ -134,8 +134,8 @@ class AlertRepository:
         actually fetched are evaluated**, never the table as a whole. During a
         provider outage the grid serves stale quotes with an honest timestamp,
         and that is right for a grid. Evaluating one here would fire an alert on
-        a price the provider has not confirmed. ``None`` accepts any quote,
-        which is only for ``condition_met_now`` on create.
+        a price the provider has not confirmed. ``None`` accepts a quote of
+        any age.
         """
         quote_join = LatestQuote.symbol_id == Symbol.id
         if fetched_since is not None:
