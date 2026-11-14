@@ -1,0 +1,12 @@
+/* MUI's CssBaseline handles the reset; this file is for genuinely global rules. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Keep long tickers and notes from blowing out table layouts. */
+* {
+  min-width: 0;
+}

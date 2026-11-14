@@ -1,0 +1,102 @@
+name: stonks-empire
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DB__USER:-stonks}
+      POSTGRES_PASSWORD: ${DB__PASSWORD:-stonks}
+      POSTGRES_DB: ${DB__NAME:-stonks_empire}
+    ports:
+      # Published on 5433 by default: a host Postgres on 5432 is common and
+      # the resulting "connects, wrong database" failure is nasty to debug.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB__USER:-stonks} -d ${DB__NAME:-stonks_empire}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    # Nothing in Redis is a source of truth (see app/core/redis.py), so there
+    # is no volume and no persistence: a restart costs rate-limit counts and
+    # breaker state, both of which rebuild themselves.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      target: dev
+    env_file: .env
+    environment:
+      # Inside the compose network the database is reachable by service name
+      # on its native port, overriding the host-facing values in .env.
+      DB__HOST: db
+      DB__PORT: 5432
+      REDIS__URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      # Started, not healthy: the API runs without Redis, just degraded.
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    # The API's image with a different command. It runs the scheduled jobs:
+    # quote polling, the nightly bar ingest, and the weekly symbol refresh.
+    build:
+      context: ./backend
+      target: dev
+    command: ["python", "-m", "app.jobs.worker"]
+    env_file: .env
+    environment:
+      DB__HOST: db
+      DB__PORT: 5432
+      REDIS__URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Reads the same heartbeat key, with the same age limit, as /ready.
+      test: ["CMD", "python", "-m", "app.jobs.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    build:
+      context: ./frontend
+      target: dev
+    env_file: .env
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

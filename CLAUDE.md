@@ -1,0 +1,425 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Stonks Empire: stock-trading utilities (watchlists, screeners, alerts, charting,
+trading journal). React + MUI frontend, FastAPI + PostgreSQL backend.
+
+The build is phased. `docs/ROADMAP.md` is the index of phases and the decisions
+behind them; the phase being built has a full spec in `docs/phases/`. **Read the
+current phase's spec before implementing it** — the roadmap alone is a summary
+and will leave you inventing details that are already decided.
+
+## Commands
+
+`make help` lists everything. Most-used:
+
+```bash
+make setup           # .env + backend venv + frontend deps
+make up              # full stack in Docker; make up-db for Postgres + Redis only
+make migrate         # alembic upgrade head
+make revision m="…"  # autogenerate a migration
+make check           # everything CI runs: lint + typecheck + test
+make gen-api         # regenerate the typed TS client after any API change
+```
+
+Single tests:
+
+```bash
+cd backend  && uv run pytest tests/unit/test_config.py::test_docs_are_disabled_in_production
+cd frontend && pnpm vitest run src/lib/api/client.test.ts
+cd frontend && pnpm vitest run -t "shows the API identity"
+```
+
+Backend commands need `uv` on PATH (`~/.local/bin`). `make` auto-detects
+`docker` vs `docker.exe`, so targets work whether or not Docker Desktop's WSL
+integration is enabled.
+
+## Environment specifics
+
+- **Postgres is published on host port 5433**, not 5432 — the host already runs
+  a Postgres on 5432. Inside Compose the API still reaches it at `db:5432`.
+- **`.env` lives only at the repo root.** `app/core/config.py` resolves it by
+  path relative to the source file, not the working directory, so `make` targets
+  work from anywhere. A `backend/.env` overrides it if present.
+- **After changing dependencies, recreate the container's anonymous volume:**
+  `docker compose up -d -V --build <service>`. Both `api` and `web` keep their
+  installed packages in an anonymous volume that Compose *preserves* across
+  `up --build`, so the stale one gets mounted over the new image: the API dies
+  with `ModuleNotFoundError` and Vite fails to resolve the new import. `-V`
+  renews anonymous volumes; the Postgres volume is named and unaffected. Never
+  use `down -v` for this — it destroys the database.
+- **The worker does not hot-reload.** It mounts the source like `api`, but a
+  scheduler that restarted on every save would keep resetting its intervals.
+  After editing a job, run `docker compose restart worker`.
+- **Tests need Redis as well as Postgres** (`make up-db` starts both). They use
+  Redis database 15 and flush it per test, so the dev stack's database 0 is
+  never touched.
+- The working tree is on a Windows drive mounted into WSL, where small-file I/O
+  is ~150× slower than the Linux filesystem. `pnpm install` takes minutes; this
+  is expected. `frontend/.npmrc` sets `node-linker=hoisted` — do **not** add
+  `package-import-method=copy`, which makes it far slower (the pnpm store is on
+  the same drive, so hardlinks work).
+
+## Backend architecture
+
+Layering is `route → service → repository → SQLAlchemy`:
+
+- Routes are thin — parse, call one service method, return a response model.
+- **Services raise domain errors from `app/core/exceptions.py`, never
+  `HTTPException`.** `app/api/errors.py` translates them into RFC 9457
+  `application/problem+json`; every error response in the app shares that one
+  shape, including validation and unhandled errors.
+- Repositories exist only where querying is non-trivial. Simple CRUD uses the
+  session directly — do not add a repository per entity.
+- `get_db` does **not** commit. Services own their transaction boundary.
+
+Cross-cutting:
+
+- Settings come from `get_settings()` (cached) and nothing else. Nested groups
+  use a double underscore: `DB__HOST` → `settings.db.host`. Production
+  hardening is enforced by a validator that fails startup.
+- `CorrelationIdMiddleware` binds a correlation id to every log line and echoes
+  it as `X-Request-ID`; it appears in every error body. structlog renders
+  console locally, JSON in prod, and redacts a fixed set of sensitive keys.
+- `/health` (liveness, no dependencies) and `/ready` (checks dependencies) are
+  unversioned and mounted outside `/api`.
+
+### Data conventions
+
+These bind every table; follow them without being asked.
+
+- **Primary keys are UUIDv7**, via the standard library's `uuid.uuid7()` (the
+  project runs Python 3.14, where it landed). SQLAlchemy's `Uuid` type handles
+  the result natively. Time-ordered, so they index well and do not leak row
+  counts. Do not add `uuid-utils`; it existed only to backfill this.
+- **All timestamps are `TIMESTAMPTZ` stored in UTC.** Use `TimestampMixin` from
+  `app/db/base.py` for `created_at`/`updated_at`; the database maintains them.
+- **Money and prices are `NUMERIC`, never float** — `NUMERIC(18, 6)` for prices
+  and quantities, `NUMERIC(18, 2)` for money. They map to Python `Decimal`;
+  never round-trip them through `float`.
+- **Every user-scoped table carries a `user_id` FK** with `ON DELETE CASCADE`
+  and a composite index leading with `user_id`.
+- Email addresses use `citext` (the extension is enabled in the baseline
+  migration) so uniqueness and lookup are case-insensitive.
+
+### Auth conventions
+
+Settled in Phase 1; every user-scoped feature after it depends on these.
+
+- **Protected routes take `CurrentUser` from `app/api/deps.py`.** It resolves the
+  bearer token *and* rejects deactivated accounts, so deactivation takes effect
+  within one access-token lifetime rather than at next login.
+- **Access tokens are 15-minute JWTs; refresh tokens are opaque, rotating, and
+  stored as SHA-256.** Presenting an already-revoked refresh token revokes its
+  whole family — reuse is treated as theft.
+- **Never widen an auth failure message.** Unknown email, wrong password, and
+  deactivated account all return the same 401 body, and unknown emails are still
+  verified against a dummy hash so timing does not enumerate accounts.
+- On the frontend the access token lives in `lib/api/session.ts` and nowhere
+  else — never `localStorage`, never a cookie. Concurrent 401s must share the
+  single in-flight refresh in `lib/api/client.ts`; firing one refresh per request
+  spends rotated tokens and gets the session family revoked.
+
+### Market data conventions
+
+Settled in Phase 2. Everything that reads prices after it depends on these.
+
+- **`Fake` is the default provider and is not a test double.** No provider
+  account exists, so it is the only implementation; Finnhub and Tiingo are
+  specified behind `MarketDataProvider` but unbuilt. A fresh clone must come up
+  working and the whole suite must pass with no API key set — selecting a real
+  provider without its key fails at startup.
+- **Providers never implement resilience.** `ResilientProvider` wraps any of
+  them with rate limiting, retry, and a circuit breaker. Order matters: an open
+  breaker fails fast before spending a token or a retry.
+- **An unknown ticker is `NotFoundError`, never `ExternalServiceError`**, and
+  does not count toward the breaker. Otherwise one typo in a watchlist trips
+  the provider for every user.
+- **A provider outage degrades, it does not fail.** `/ready` reports
+  `market_data` as a named check but only `_REQUIRED_CHECKS` decides the
+  status, and stale quotes are served with their real `fetched_at` rather than
+  blanking the grid.
+- **Indicators are computed, never fetched**, in `Decimal` — no pandas, no
+  numpy. EMA seeds from the SMA of its first window; RSI and ATR use Wilder's
+  smoothing, not a same-period EMA; the MACD signal is an EMA *of the MACD
+  line*, so it starts 8 bars later. Recompute over the symbol's whole stored
+  series, never just the fetched window.
+- **`latest_quotes` is written by a Core upsert, so its reads need
+  `populate_existing`.** The identity map does not see Core statements and the
+  session does not expire on commit, so a row already loaded in the request
+  keeps serving pre-upsert values — which made the grid render the price it had
+  just refreshed away.
+- Prices cross the wire as **strings** (Pydantic serialises `Decimal` that
+  way). On the frontend they are parsed only in `lib/format.ts`, at the point
+  of display or sorting, and never passed around as numbers.
+- `make seed` and `make backfill` are **never automatic**. Phase 5's worker is
+  what schedules them.
+
+### Charting conventions
+
+Settled in Phase 3. Everything that draws a chart after it depends on these.
+
+- **The chart wrapper lives in `components/chart/` and knows nothing about
+  symbols.** It takes already-shaped series plus a colour set, owns the
+  `createChart` lifecycle, and disposes on unmount. Phase 6's equity curve
+  reuses it, and features may not import each other.
+- **`lightweight-charts` renders to canvas, so nothing tests the pixels.** The
+  coverage is paid back by `toChartSeries`, a pure function tested directly;
+  page tests stub the wrapper. Say so in any new chart test file rather than
+  leaving the gap to be assumed.
+- **Chart colours are never read through `theme.palette.*`.** The MUI theme
+  runs on CSS variables, so `palette.profit.main` is the string
+  `var(--mui-palette-profit-main)` — a canvas paints nothing with that.
+  `components/chart/chartTheme.ts` holds real values, per mode.
+- **Colour is computable, so compute it.** Any change to a chart colour is
+  re-checked with `scripts/validate_palette.js` from the `dataviz` skill
+  against the real surface, in both modes — never reasoned about. The command
+  lines are in `chartTheme.ts`. This caught two failing values in the Phase 3
+  spec before a line of chart code existed.
+- **`profit` vs `loss` is ΔE 4.4 under deuteranopia**, far below the ≥8 target,
+  so **direction is never carried by hue alone**: candles are hollow up and
+  filled down. Do not repaint the palette tokens — Phase 2 depends on them, and
+  the quote grid already signs its numbers, which is the same kind of second
+  encoding.
+- **Volume takes one neutral hue and its own pane. No chart here ever gets a
+  second y-axis.** Two independent scales make any apparent crossing an
+  artefact of how they were scaled.
+- **Overlay colour is fixed per indicator identity, never per position** — or
+  turning one line off repaints the others. There are three validated slots, so
+  there are exactly three overlay identities; a fourth needs a fourth validated
+  colour first.
+- **A missing indicator value is an absent `value`, never a zero.** Zero plots a
+  line to the bottom of the pane and reads as a crash — which is what the
+  leading 199 bars of a 200-day average would do.
+- Every canvas chart ships a crosshair readout **in HTML**, not painted into the
+  canvas: canvas text is unselectable and invisible to a screen reader. Phase 3
+  also built a table view of the same rows and then removed it on request, so
+  the readout is currently the only non-visual path to the data — worth
+  revisiting in Phase 7's accessibility pass.
+
+### Screener conventions
+
+Settled in Phase 4. Anything that turns user input into a query after it
+depends on these.
+
+- **No user-supplied string ever reaches SQL.** A filter names a field by key;
+  `app/services/screener/fields.py` resolves the key to a real SQLAlchemy
+  expression, and an unknown key, operator, or unit-mismatched comparison is a
+  422 from `app/schemas/screener.py` before any service runs. Operators map to
+  Python's `operator` functions, never to strings near a query.
+- **The field registry is the only list of what is screenable**, and it feeds
+  both the compiler and `GET /screener/fields`. The frontend keeps no copy —
+  the filter builder is generated from that endpoint, so a new column appears
+  in the UI without a frontend change. A registry entry may declare *no* filter
+  kinds (`ticker`, `name`): it is then sortable and displayed but not
+  filterable.
+- **Numeric operands cross the wire as strings and a JSON number is a 422**,
+  not a coercion. `100.10` parsed as a float is `100.09999999999999`, which is
+  the bug the `Decimal` convention exists to prevent. The OpenAPI schema says
+  `string` for exactly this reason.
+- **A recursive schema needs a ceiling**: depth 3, 25 nodes, 50 category
+  values, enforced by one walk in the schema layer so the limit is a 422 and
+  never an `OperationalError`. Test any new cap at the boundary and one past it.
+- **Nulls do not match, and must never be `COALESCE`d.** `close > sma_200` is
+  `NULL` for a symbol with too little history, so it drops out — correctly.
+  Make it *visible* through `universe_size`, not true through a fabricated
+  number. The same applies to `neq` and `NOT IN`, which are not the complements
+  people expect. Indicators join with a **LEFT JOIN** for the same reason.
+- **One shared `as_of` per run**, `max(trade_date)` over `daily_bars`, and
+  never `latest_quotes` — that table is a TTL cache of whatever someone happened
+  to look at. A symbol with no bar on `as_of` is outside the universe for that
+  run rather than compared against a stale row.
+- **Anything needing more than one row per symbol is an indicator column, not a
+  window function in a screen.** A derived value that exists only inside one
+  query lets the chart and the screen disagree about the same symbol.
+- **The 52-week window is 252 bars, not 252 calendar days**, unlike
+  `ChartRange`, which is calendar-based because a toolbar label promises
+  calendar time. Both are right for their own job; say so in the comment.
+- **`total_matched` is the pre-cap count and there is no pagination.** A screen
+  returning 412 of 530 wants narrowing, not a second page — so sorting is
+  server-side, because re-ordering the returned hundred would present a hundred
+  of four hundred matches as the top hundred.
+- **Both bar tables carry a `trade_date`-only index.** Their primary key leads
+  with `symbol_id`, which serves every per-symbol query and cannot serve the
+  screener. `EXPLAIN` any new whole-universe query rather than assuming.
+- **A stored filter tree is validated on the way out as well as in.** `JSONB`
+  enforces nothing, so the preset *listing* deliberately does not parse trees —
+  one preset naming a removed column must not take the page down — while
+  opening or running one is a 422 naming the offending field.
+
+### Worker, alerts, and real-time conventions
+
+Settled in Phase 5. Everything that runs on a schedule, or pushes to a browser,
+depends on these.
+
+- **Postgres is the source of truth and Redis never is.** Redis holds rate-limit
+  counts, breaker state, the worker heartbeat, and pub/sub hints. Every Redis
+  caller has an in-process fallback and goes through the shared `RedisGuard`
+  (`app/core/redis.py`), which logs an outage once and skips Redis for a few
+  seconds after a failure. The login limiter falls back to per-process limits,
+  **never to no limit**. `/ready` reports `redis` and `worker` as degraded,
+  never fatal.
+- **The provider rate limit and the breaker are shared through Redis**, because
+  they meter one account across `api` and `worker`. The bucket is one Lua script
+  (read, refill, take, write); never split it into a read and a write from
+  Python.
+- **Time is an input.** Job logic takes a `Clock` (`app/core/clock.py`) and never
+  calls `datetime.now()`, so tests run at frozen instants. Market time goes
+  through `utc_now`, which honours `DEV_CLOCK_OFFSET` outside production;
+  liveness (the heartbeat) uses the real clock. Market hours, holidays, and DST
+  live only in `app/core/market_calendar.py`. Jobs fire on plain schedules and
+  ask the calendar first, because cron cannot say "unless it is Good Friday".
+- **Jobs are plain functions of `(session_factory, clock)`** in
+  `app/jobs/tasks/`, and know nothing about APScheduler. `app/jobs/worker.py` is
+  wiring only. **Every run takes a session-level advisory lock** on a dedicated
+  connection. Keys are fixed integers in `app/jobs/locks.py`, never `hash()`,
+  which is salted per process. A new job gets a new number; numbers are never
+  reused. The heartbeat is the one exception: it writes nothing to Postgres.
+- **Alerts reuse the screener's DSL, compiler, and universe**, with one field
+  registry per source: `FIELDS` (bars, also used by end-of-day alerts) and
+  `INTRADAY_FIELDS` (live quotes plus indicators). Nodes validate structure
+  against every known key; **each entry point then checks its own registry**
+  with `require_registry`. A key shared by two registries must mean the same
+  unit and filter kinds in both, and a test asserts it. Never write a second
+  evaluator in Python: two evaluators means two sets of null rules.
+- **Firing is edge-triggered** (`app/services/alerts/evaluation.py`, pure). It
+  fires on false → true only. NULL leaves `last_state` alone. The first
+  definite evaluation of a new, edited, or resumed alert only records. The
+  cooldown suppresses firing but still tracks state. Intraday alerts are
+  evaluated **only against quotes fetched in this run**, so a provider outage
+  evaluates nothing rather than firing on stale prices.
+- **One bad alert stops nothing.** Each alert is evaluated in its own savepoint.
+  A stale tree or a delisted symbol disables that alert with a reason and a
+  notification, and the run continues. A firing writes the alert's state, an
+  `alert_triggers` snapshot, and the notification **in one transaction**.
+  Nothing outside Postgres happens inside it.
+- **A push is a hint, not data.** `quotes_updated` carries tickers and
+  `notification_created` carries ids, and both are published **after** the
+  commit. The client only invalidates query keys and refetches over REST
+  (`lib/realtime/connection.ts`); it never writes pushed data into the cache.
+  `notification_created` goes to its owner's sockets only, and that is tested
+  as a cross-user case.
+- **The socket authenticates by first message and lives as long as its token**
+  (`app/api/v1/routes/ws.py`). It uses `authenticate_token`, the same function
+  as `CurrentUser`. On 4401 the client joins the shared refresh in
+  `lib/api/client.ts` and never starts its own. A socket that cannot subscribe
+  closes with 1013 rather than staying open and silent.
+- **Polling is the fallback, not dead code.** Anything that used to poll keeps
+  its interval and applies it only while `useRealtimeConnected()` is false.
+- Lists that grow without bound (notifications, trigger history) are
+  **cursor-paginated** on `(timestamp, id)`. An offset skips or repeats rows
+  when new ones arrive at the top.
+
+### Testing conventions
+
+- Database tests live in `tests/integration/` and use the fixtures in its
+  `conftest.py`: migrate once per session, then wrap each test in a transaction
+  that is rolled back. The session joins it with a savepoint, so service-level
+  `commit()` calls still land somewhere disposable.
+- **The integration client speaks `https://testserver`.** The refresh cookie is
+  `Secure` outside `local`, and a cookie jar will not return a `Secure` cookie
+  over plain HTTP — so an `http://` client silently loses every refresh test.
+- **Every phase that adds a user-scoped resource appends it to one of the two
+  registries** in `tests/integration/test_cross_user_authorization.py`.
+  `CROSS_USER_RESOURCES` is for resources addressed by an id in the path — name
+  another user's row, expect to be denied; prefer `404` over `403`, since `403`
+  confirms the row exists. `CALLER_SCOPED_RESOURCES` is for `/me/...` resources
+  whose identity *is* the caller, where 200 is the right answer and the real
+  failure is one user's write landing on another's row. Putting a caller-scoped
+  endpoint in the first list asserts something false. The harness builds the
+  other user's rows through the API, so a new resource needs a fixture there
+  too, not just a path entry.
+- **One contract suite runs against every provider**, parameterized in
+  `tests/unit/test_market_data_contract.py`. Adding a provider means adding one
+  entry to `PROVIDERS`; if it does not pass unchanged, the seam has leaked.
+  Every provider is built with a frozen clock: "no bar before the close" and
+  "the closing quote equals the bar" are contract.
+- **Jobs are tested by calling them** with the `session_factory` and `clock`
+  fixtures from `tests/integration/conftest.py`. The factory's sessions join the
+  test's rolled-back transaction. Job-test providers and publishers live in
+  `tests/integration/providers.py`.
+- `CALLER_SCOPED_EFFECT_RESOURCES` is the third registry in the cross-user
+  harness. It is for `/me/...` endpoints that read or act on rows something else
+  created (the notification list, count, and read-all): the other user's view
+  must be unchanged and never appear in the caller's response.
+- **WebSocket tests run in-process** with `httpx-ws` on the test's own loop.
+  Open the client inside the test, never in a fixture: its anyio task group
+  must be entered and exited in the same task.
+- **A `/ready` test about some other check uses `database_check_passes`.** The
+  real database check runs on the app's pooled engine, whose connections
+  outlive the test's event loop.
+
+### Dependency policy
+
+Some popular packages are deliberately banned here:
+
+- **Never `passlib`** — unmaintained since 2020 and warns on Python 3.13+.
+  Use `pwdlib[argon2]` (Argon2id).
+- **Never `python-jose`** — stale, with a CVE history. Use `PyJWT`.
+- **Never `moment`, `create-react-app`, or `react-router-dom`** (v7+ renamed the
+  package to `react-router`).
+- **Never `aioredis`**: it merged into `redis` (`redis.asyncio`) and is dead.
+- **APScheduler stays below 4.0.** 4.x is an alpha with an entirely different
+  API. Do not upgrade across that line in passing.
+- **Never `exchange_calendars`**: it pulls in pandas. Holidays come from
+  `holidays` (NYSE calendar).
+
+### Database and migrations
+
+- **Every model module must be imported in `app/models/__init__.py`.** Alembic's
+  `env.py` imports that package to populate metadata; a model missing from it is
+  invisible to autogenerate, and the next migration will drop its table.
+- The `MetaData` naming convention in `app/db/base.py` must not change — it is
+  baked into existing migrations and keeps autogenerate diffs stable.
+- Migration URLs come from `app.core.config`, never `alembic.ini`.
+- Always review autogenerated migrations, give them a real `downgrade()`, and
+  keep schema and data changes in separate revisions. CI runs `alembic check`
+  for drift plus a full `downgrade base` → `upgrade head` round-trip.
+- Enums are `VARCHAR` + CHECK constraint + a Python `StrEnum`, not native
+  Postgres enums — enum values change often here and `ALTER TYPE` is painful.
+
+## Frontend architecture
+
+- Feature-first under `src/features/<feature>/{api,components,hooks,routes}`.
+  Features may import from `components/`, `lib/`, `theme/` — **never from
+  another feature.** Shared code moves up instead.
+- `@/` aliases `src/`. Use it for cross-directory imports; keep sibling and
+  child imports relative.
+- Server state is TanStack Query. All query keys are built in
+  `src/lib/queryKeys.ts` so invalidation stays precise.
+- `src/lib/api/client.ts` normalises every non-2xx response into an `ApiError`
+  carrying `code` and `correlationId`, so components never branch on
+  `data`/`error` shapes.
+- Theme is dark-first with `profit`/`loss` as real palette tokens — use those
+  rather than green/red literals. Numerals render `tabular-nums` so price and
+  P&L columns line up.
+
+### Generated API client
+
+`src/lib/api/schema.ts` is generated from the backend's OpenAPI schema — never
+edit it. After changing any route, schema, or response model, run `make gen-api`
+and commit the result; CI fails if it is stale. Generation reads
+`backend/openapi.json` (exported from the app object), so it needs no running
+server.
+
+## Version constraints worth knowing
+
+- **Python is pinned to exactly 3.14.7**, in `backend/.python-version`,
+  `requires-python`, the mypy target, both Dockerfile stages, and CI's
+  `setup-uv`. The builder stage shares the production base image and copies the
+  uv binary in, because uv's own images are tagged by minor version only and
+  ship a different patch release — which an exact pin cannot satisfy under
+  `UV_PYTHON_DOWNLOADS=never`. Bump all five together.
+- **TypeScript is pinned to 6.x on purpose.** `openapi-typescript` 7.13 crashes
+  on TypeScript 7 (`ts.factory` is undefined under the new compiler). Do not
+  bump it until that is fixed upstream.
+- MUI is v9: layout system props (`alignItems`, `flexWrap`, …) are no longer
+  accepted directly on `Stack` — put them in `sx`.
+- Config tests build `Settings` with `_env_file=None` so they test declared
+  defaults rather than the developer's `.env`. Note `os.environ` outranks both,
+  so avoid pinning config values in `conftest.py` unless every test wants them.
+  For the same reason, never assert on a literal environment name: `conftest.py`
+  sets `ENVIRONMENT` with `os.environ.setdefault`, which is a no-op in CI (where
+  the workflow already exports `ENVIRONMENT=ci`). Compare against
+  `get_settings().environment` instead.

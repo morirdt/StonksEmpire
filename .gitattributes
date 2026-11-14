@@ -1,0 +1,19 @@
+# Normalize all text files to LF in the repo, regardless of checkout platform.
+# This project is developed from WSL against a Windows-mounted working tree,
+# where the default would otherwise produce CRLF churn in every diff.
+* text=auto eol=lf
+
+# Explicitly binary — never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Lockfiles: generated, collapse them in diffs and reviews.
+uv.lock          linguist-generated=true -diff
+pnpm-lock.yaml   linguist-generated=true -diff
