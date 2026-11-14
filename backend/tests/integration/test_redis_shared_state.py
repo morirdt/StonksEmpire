@@ -22,7 +22,6 @@ from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import NoBackoff
 
-import app.api.health as health_module
 import app.core.redis as redis_module
 from app.core.config import get_settings
 from app.core.rate_limit import SharedRateLimiter
@@ -268,24 +267,18 @@ async def test_the_breaker_falls_back_to_process_memory_when_redis_is_down(
 # ----------------------------------------------------------------------- ready
 
 
+@pytest.mark.usefixtures("database_check_passes")
 async def test_ready_reports_redis_healthy(client: AsyncClient) -> None:
     body = (await client.get("/ready")).json()
 
     assert body["checks"]["redis"] is True
 
 
+@pytest.mark.usefixtures("database_check_passes")
 async def test_ready_with_redis_stopped_is_degraded_not_failed(
     client: AsyncClient,
     redis_down: Redis,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def ok() -> bool:
-        return True
-
-    # The rolled-back test session is not the app's engine; the database check
-    # is covered elsewhere and is not what this test is about.
-    monkeypatch.setattr(health_module, "check_database", ok)
-
     response = await client.get("/ready")
 
     assert response.status_code == 200

@@ -79,6 +79,12 @@ warn_unreachable = true
 # Alembic revisions are generated; holding them to strict typing buys nothing.
 exclude = ["^alembic/versions/"]
 
+# APScheduler 3.x ships no type information, and 4.x (which does) is still
+# alpha. Only app/jobs/worker.py imports it, and that module is wiring only.
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false

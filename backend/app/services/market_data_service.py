@@ -11,7 +11,7 @@ and it owns its own transaction boundary — ``get_db`` does not commit.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 
 import structlog
@@ -117,7 +117,7 @@ class MarketDataService:
         stale_ids = [sid for sid in by_id if sid not in fresh]
 
         if stale_ids:
-            refreshed = await self._refresh_quotes({sid: by_id[sid] for sid in stale_ids})
+            refreshed = await self.refresh_quotes([by_id[sid] for sid in stale_ids])
             fresh |= refreshed
             missing = [sid for sid in stale_ids if sid not in refreshed]
             if missing:
@@ -126,10 +126,19 @@ class MarketDataService:
 
         return {by_id[sid].ticker: quote for sid, quote in fresh.items()}
 
-    async def _refresh_quotes(
-        self, symbols: Mapping[uuid.UUID, Symbol]
+    async def refresh_quotes(
+        self,
+        symbols: Sequence[Symbol],
+        *,
+        fetched_at: datetime | None = None,
     ) -> dict[uuid.UUID, LatestQuote]:
-        tickers = [s.ticker for s in symbols.values()]
+        """Fetch and store fresh quotes, returning only the rows actually refreshed.
+
+        A provider failure returns ``{}`` rather than raising. The read path then
+        serves stale rows, and the poll job evaluates nothing, because "what
+        this run fetched" is exactly what the return value says.
+        """
+        tickers = [s.ticker for s in symbols]
         try:
             quotes = await self._provider.get_quotes(tickers)
         except ExternalServiceError as exc:
@@ -141,14 +150,14 @@ class MarketDataService:
             )
             return {}
 
-        by_ticker = {s.ticker: sid for sid, s in symbols.items()}
+        by_ticker = {s.ticker: s.id for s in symbols}
         fetched: dict[uuid.UUID, Quote] = {
             by_ticker[ticker]: quote for ticker, quote in quotes.items() if ticker in by_ticker
         }
         if not fetched:
             return {}
 
-        await self._quotes.upsert_many(fetched)
+        await self._quotes.upsert_many(fetched, fetched_at=fetched_at)
         await self._session.commit()
         return await self._quotes.get_many(list(fetched))
 
@@ -180,8 +189,14 @@ class MarketDataService:
         forever.
         """
         end = today or datetime.now(UTC).date()
-        start = end - timedelta(days=days)
+        return await self.ingest_range(symbol, end - timedelta(days=days), end)
 
+    async def ingest_range(self, symbol: Symbol, start: date, end: date) -> tuple[int, int]:
+        """Fetch ``[start, end]``, store it, and recompute the symbol's indicators.
+
+        Shared by the manual backfill and the nightly top-up, so the two cannot
+        drift apart. Returns ``(bars, indicator_rows)``.
+        """
         bars = await self._provider.get_daily_bars(symbol.ticker, start, end)
         stored = await self._bars.upsert_bars(symbol.id, bars)
         await self._session.commit()

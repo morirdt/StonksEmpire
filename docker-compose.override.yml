@@ -10,6 +10,14 @@ services:
     command:
       ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
+  worker:
+    # Source is mounted, but the worker does not hot-reload: a scheduler that
+    # restarts on every save would keep resetting its intervals. After editing
+    # a job, run `docker compose restart worker`.
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+
   web:
     volumes:
       - ./frontend:/app

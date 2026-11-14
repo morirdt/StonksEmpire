@@ -6,7 +6,7 @@ groups use a double-underscore delimiter, e.g. ``DB__HOST=localhost``.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import time, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
@@ -150,6 +150,22 @@ class RedisSettings(BaseModel):
     retry_after_seconds: float = 5.0
 
 
+class WorkerSettings(BaseModel):
+    """The background worker's schedule. Times are US/Eastern wall-clock times."""
+
+    #: How often the hot set is re-quoted while the market is open.
+    quote_poll_seconds: int = Field(default=60, ge=10)
+
+    #: When the nightly bar ingest runs. After the 16:00 close, with room for a
+    #: real provider to have published the day's final bars.
+    eod_ingest_time: time = time(17, 30)
+
+    #: The furthest the nightly ingest reaches back for one symbol. A symbol
+    #: further behind than this, or with no bars at all, needs a manual
+    #: `make backfill`; the worker only ever tops up.
+    max_ingest_gap_days: int = Field(default=30, ge=1)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Anchored to the repo, not the process CWD: the API runs from
@@ -187,6 +203,7 @@ class Settings(BaseSettings):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    worker: WorkerSettings = Field(default_factory=WorkerSettings)
 
     @property
     def is_prod(self) -> bool:

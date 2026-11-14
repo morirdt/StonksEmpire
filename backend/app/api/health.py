@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.redis import redis_is_healthy
 from app.db.session import check_database
 from app.integrations.market_data import market_data_is_healthy
+from app.jobs.heartbeat import worker_is_alive
 
 router = APIRouter(tags=["health"])
 
@@ -46,7 +47,8 @@ async def health() -> HealthResponse:
 #: rotation — a market data provider having a bad afternoon must not look
 #: identical to a lost database connection. Redis is out for the same reason:
 #: every Redis caller has an in-process fallback, so losing it degrades the app
-#: without stopping it.
+#: without stopping it. So is the worker: without it data goes stale and alerts
+#: stop firing, which is serious, but the API can still serve what it has.
 _REQUIRED_CHECKS = ("database",)
 
 
@@ -63,6 +65,7 @@ async def ready(response: Response) -> ReadinessResponse:
         "database": await check_database(),
         "market_data": await market_data_is_healthy(),
         "redis": await redis_is_healthy(),
+        "worker": await worker_is_alive(),
     }
     ok = all(checks[name] for name in _REQUIRED_CHECKS)
     if not ok:

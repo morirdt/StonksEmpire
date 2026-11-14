@@ -11,12 +11,13 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import Float, case, func, select
+from sqlalchemy import Float, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.market_data.base import SymbolInfo
 from app.models.symbol import Symbol
+from app.models.watchlist import WatchlistItem
 
 
 class SymbolRepository:
@@ -121,6 +122,37 @@ class SymbolRepository:
         if limit is not None:
             query = query.limit(limit)
         result = await self._session.execute(query)
+        return list(result.scalars())
+
+    async def list_hot_set(self) -> list[Symbol]:
+        """The symbols worth re-quoting every minute: those somebody is watching.
+
+        Not the whole universe: polling 533 symbols a minute against a quota of
+        60 requests a minute would spend the whole session rate-limited.
+        """
+        watched = select(WatchlistItem.symbol_id).distinct()
+        result = await self._session.execute(
+            select(Symbol)
+            .where(Symbol.is_active.is_(True), Symbol.id.in_(watched))
+            .order_by(Symbol.ticker)
+        )
+        return list(result.scalars())
+
+    async def deactivate_missing(self, listed_tickers: Sequence[str]) -> list[Symbol]:
+        """Deactivate every active symbol the provider no longer lists.
+
+        Deactivated, never deleted: watchlists and alerts reference symbols by
+        foreign key, and a deactivated symbol drops out of the screener universe
+        without taking anybody's history with it.
+        """
+        listed = {t.upper() for t in listed_tickers}
+        result = await self._session.execute(
+            update(Symbol)
+            .where(Symbol.is_active.is_(True), Symbol.ticker.not_in(listed))
+            .values(is_active=False, updated_at=datetime.now(UTC))
+            .returning(Symbol)
+            .execution_options(populate_existing=True)
+        )
         return list(result.scalars())
 
     async def count(self) -> int:

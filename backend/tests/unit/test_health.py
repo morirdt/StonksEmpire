@@ -13,12 +13,13 @@ async def _healthy() -> bool:
 
 @pytest.fixture(autouse=True)
 def _soft_dependencies_up(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unit tests have no Redis, so its check is healthy unless a test says not.
+    """Unit tests have no Redis or worker, so those checks pass unless a test says not.
 
     The real check, against a real Redis, runs in the integration suite.
     """
     monkeypatch.setattr(health_module, "redis_is_healthy", _healthy)
     monkeypatch.setattr(health_module, "market_data_is_healthy", _healthy)
+    monkeypatch.setattr(health_module, "worker_is_alive", _healthy)
 
 
 async def test_health_reports_ok(client: AsyncClient) -> None:

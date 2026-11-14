@@ -10,7 +10,10 @@ assumes.
 Two years is the default because it covers ``sma_200`` with roughly 250 bars of
 headroom. Deeper history is just a bigger ``--days``; it is not a migration.
 
-Like the seed, this never runs on its own. Phase 5's worker is what schedules it.
+Like the seed, this never runs on its own. The worker's nightly ``ingest_eod``
+only tops up: it fetches from each symbol's last stored bar, at most 30 days back.
+A symbol with no history, or one further behind than that, is logged as
+needing this script.
 """
 
 from __future__ import annotations

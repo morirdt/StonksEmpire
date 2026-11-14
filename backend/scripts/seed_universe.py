@@ -3,9 +3,9 @@
     uv run python -m scripts.seed_universe [--limit N]
 
 Idempotent: every row is upserted on ``ticker``, so running it twice changes
-nothing but ``last_refreshed_at``. Nothing runs it automatically — scheduling
-arrives with the Phase 5 worker, and an unattended universe fetch on ``make up``
-would spend a free-tier quota before anyone noticed.
+nothing but ``last_refreshed_at``. It never runs automatically: a fresh clone
+needs it once, by hand. After that the worker's weekly ``refresh_symbols`` keeps
+the universe current, and deactivates symbols the provider stops listing.
 """
 
 from __future__ import annotations

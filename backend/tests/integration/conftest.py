@@ -20,17 +20,25 @@ import contextlib
 import pathlib
 import uuid
 from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import pytest
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 
+import app.api.health as health_module
 from alembic import command
 from app.api.v1.routes import auth as auth_routes
 from app.core.config import get_settings
+from app.core.market_calendar import MARKET_TZ
 from app.core.redis import REDIS_UNAVAILABLE, get_redis
 from app.db.session import get_db
 from app.main import create_app
@@ -95,24 +103,85 @@ async def _clean_redis() -> AsyncGenerator[None]:
 
 
 @pytest.fixture
-async def db_session() -> AsyncGenerator[AsyncSession]:
+async def db_connection() -> AsyncGenerator[AsyncConnection]:
+    """One connection per test, inside a transaction that is rolled back."""
     engine = create_async_engine(get_settings().db.url, poolclass=NullPool)
     async with engine.connect() as connection:
         transaction = await connection.begin()
-        session = AsyncSession(
-            bind=connection,
-            expire_on_commit=False,
-            # Service code commits; this turns that into a savepoint release so
-            # the outer rollback below still undoes everything.
-            join_transaction_mode="create_savepoint",
-        )
         try:
-            yield session
+            yield connection
         finally:
-            await session.close()
             if transaction.is_active:
                 await transaction.rollback()
     await engine.dispose()
+
+
+@pytest.fixture
+def session_factory(db_connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
+    """What a job takes in place of the app's ``SessionFactory``.
+
+    Every session it opens joins the test's transaction through a savepoint, so
+    a job's commits are rolled back with everything else, and the test sees
+    what the job wrote.
+    """
+    return async_sessionmaker(
+        bind=db_connection,
+        expire_on_commit=False,
+        # Service code commits; this turns that into a savepoint release so the
+        # outer rollback still undoes everything.
+        join_transaction_mode="create_savepoint",
+    )
+
+
+@pytest.fixture
+async def db_session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession]:
+    session = session_factory()
+    try:
+        yield session
+    finally:
+        await session.close()
+
+
+@pytest.fixture
+def database_check_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """For ``/ready`` tests about some other check.
+
+    The real database check runs on the app's pooled engine, not the test's
+    connection. Its pooled connections then outlive the test's event loop, and
+    asyncpg warns when they are collected. The database check has its own tests
+    in ``tests/unit/test_health.py``.
+    """
+
+    async def ok() -> bool:
+        return True
+
+    monkeypatch.setattr(health_module, "check_database", ok)
+
+
+class FrozenClock:
+    """A clock for job tests. Set it in ET, because that is how the rules are stated."""
+
+    def __init__(self, at: datetime) -> None:
+        self.at = at
+
+    def __call__(self) -> datetime:
+        return self.at
+
+    def set_et(self, *args: int) -> None:
+        self.at = datetime(*args, tzinfo=MARKET_TZ).astimezone(UTC)  # type: ignore[misc]
+
+    def advance(self, **kwargs: float) -> None:
+        self.at += timedelta(**kwargs)
+
+
+@pytest.fixture
+def clock() -> FrozenClock:
+    """Wednesday 18 November 2026, 11:00 ET: an ordinary session, mid-morning."""
+    frozen = FrozenClock(datetime(2026, 1, 1, tzinfo=UTC))
+    frozen.set_et(2026, 11, 18, 11, 0)
+    return frozen
 
 
 @pytest.fixture

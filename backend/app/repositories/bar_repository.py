@@ -143,6 +143,21 @@ class BarRepository:
         first, last = result.one()
         return first, last
 
+    async def latest_dates(self, symbol_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, date]:
+        """The newest stored bar date per symbol. Symbols with no bars are absent.
+
+        One grouped query for the whole universe, rather than one per symbol:
+        the nightly ingest asks this about every active symbol.
+        """
+        if not symbol_ids:
+            return {}
+        result = await self._session.execute(
+            select(DailyBar.symbol_id, func.max(DailyBar.trade_date))
+            .where(DailyBar.symbol_id.in_(symbol_ids))
+            .group_by(DailyBar.symbol_id)
+        )
+        return dict(result.tuples().all())
+
     async def count_for(self, symbol_id: uuid.UUID) -> int:
         result = await self._session.execute(
             select(func.count()).select_from(DailyBar).where(DailyBar.symbol_id == symbol_id)

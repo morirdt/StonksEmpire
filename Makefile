@@ -31,7 +31,7 @@ setup: ## First-time setup: .env, backend venv, frontend deps
 
 # ----------------------------------------------------------------- docker ---
 .PHONY: up
-up: ## Start the full stack (db + api + web)
+up: ## Start the full stack (db + redis + api + worker + web)
 	$(COMPOSE) up -d --build
 
 .PHONY: up-db
@@ -82,9 +82,10 @@ migration-check: ## Fail if models have drifted from migrations
 	cd $(BACKEND) && uv run alembic check
 
 # --------------------------------------------------------------- ingest -----
-# Neither target runs automatically. Scheduling arrives with the Phase 5 worker;
-# an unattended backfill triggered by `make up` would spend a free-tier provider
-# quota before anyone noticed.
+# Neither target runs automatically: a fresh clone runs each once, by hand. An
+# unattended two-year backfill on `make up` would spend a free-tier provider
+# quota before anyone noticed. After that the worker keeps things current: a
+# nightly incremental bar ingest and a weekly symbol refresh.
 .PHONY: seed
 seed: ## Seed the symbol universe from the configured provider
 	cd $(BACKEND) && uv run python -m scripts.seed_universe

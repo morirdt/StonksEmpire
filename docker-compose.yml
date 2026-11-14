@@ -61,6 +61,31 @@ services:
       retries: 5
       start_period: 20s
 
+  worker:
+    # The API's image with a different command. It runs the scheduled jobs:
+    # quote polling, the nightly bar ingest, and the weekly symbol refresh.
+    build:
+      context: ./backend
+      target: dev
+    command: ["python", "-m", "app.jobs.worker"]
+    env_file: .env
+    environment:
+      DB__HOST: db
+      DB__PORT: 5432
+      REDIS__URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Reads the same heartbeat key, with the same age limit, as /ready.
+      test: ["CMD", "python", "-m", "app.jobs.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
   web:
     build:
       context: ./frontend
