@@ -16,6 +16,7 @@ from app.api.v1.routes import (
     notifications,
     screener,
     watchlists,
+    ws,
 )
 
 api_router = APIRouter()
@@ -27,3 +28,4 @@ api_router.include_router(meta.router)
 api_router.include_router(notifications.router)
 api_router.include_router(screener.router)
 api_router.include_router(watchlists.router)
+api_router.include_router(ws.router)

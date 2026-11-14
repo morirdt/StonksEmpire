@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 from app.api.errors import register_exception_handlers
 from app.api.health import router as health_router
 from app.api.middleware import AccessLogMiddleware, CorrelationIdMiddleware
+from app.api.realtime import RealtimeHub
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         database=settings.db.safe_url,
     )
     yield
+    await app.state.realtime.close()
     await close_redis()
     await dispose_engine()
     logger.info("application_stopped")
@@ -92,6 +94,10 @@ def create_app() -> FastAPI:
     app.add_middleware(CorrelationIdMiddleware)
 
     register_exception_handlers(app)
+
+    # The WebSocket fan-out: one Redis subscription per process, started by the
+    # first socket so that it runs on the serving loop.
+    app.state.realtime = RealtimeHub()
 
     app.include_router(health_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)

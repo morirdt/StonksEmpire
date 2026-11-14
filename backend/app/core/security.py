@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -81,11 +82,27 @@ def create_access_token(
     return token, int(settings.auth.access_token_ttl.total_seconds())
 
 
+@dataclass(frozen=True, slots=True)
+class AccessClaims:
+    subject: uuid.UUID
+    expires_at: datetime
+
+
 def decode_access_token(token: str) -> uuid.UUID:
     """Return the subject of a valid access token.
 
     Rejects any token whose ``type`` is not ``access``, so a refresh token can
     never be replayed as an access token even though both are bearer strings.
+    """
+    return decode_access_claims(token).subject
+
+
+def decode_access_claims(token: str) -> AccessClaims:
+    """The subject and expiry of a valid access token.
+
+    The WebSocket needs the expiry: a socket lives only as long as the token
+    that opened it, so deactivating an account takes effect within one token
+    lifetime on a socket too.
     """
     settings = get_settings()
     try:
@@ -102,7 +119,10 @@ def decode_access_token(token: str) -> uuid.UUID:
         raise TokenError("Token is not an access token.")
 
     try:
-        return uuid.UUID(claims["sub"])
+        return AccessClaims(
+            subject=uuid.UUID(claims["sub"]),
+            expires_at=datetime.fromtimestamp(int(claims["exp"]), UTC),
+        )
     except (KeyError, ValueError) as exc:
         raise TokenError("Token subject is not a valid id.") from exc
 

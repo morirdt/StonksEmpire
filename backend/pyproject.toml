@@ -29,6 +29,7 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    "httpx-ws>=0.10.0",
 ]
 
 [build-system]

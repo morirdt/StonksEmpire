@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.exceptions import AuthenticationError
-from app.core.security import TokenError, decode_access_token
+from app.core.security import AccessClaims, TokenError, decode_access_claims
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
@@ -28,27 +28,33 @@ AppSettings = Annotated[Settings, Depends(get_settings)]
 _bearer = HTTPBearer(auto_error=False)
 
 
+async def authenticate_token(session: AsyncSession, token: str) -> tuple[User, AccessClaims]:
+    """Resolve an access token to an active user, or raise ``AuthenticationError``.
+
+    The one implementation of "who is this", shared by ``CurrentUser`` and the
+    WebSocket handshake, so a socket can never be laxer than a request.
+    Inactive accounts are rejected here as well as at login, so deactivating a
+    user takes effect within one access-token lifetime instead of at next login.
+    """
+    try:
+        claims = decode_access_claims(token)
+    except TokenError as exc:
+        raise AuthenticationError("Invalid or expired token.") from exc
+
+    user = await UserRepository(session).get_by_id(claims.subject)
+    if user is None or not user.is_active:
+        raise AuthenticationError("Invalid or expired token.")
+    return user, claims
+
+
 async def get_current_user(
     session: DbSession,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> User:
-    """Resolve the bearer token to an active user.
-
-    Inactive accounts are rejected here as well as at login, so deactivating a
-    user takes effect within one access-token lifetime instead of at next login.
-    """
+    """Resolve the bearer token to an active user."""
     if credentials is None:
         raise AuthenticationError("Not authenticated.")
-
-    try:
-        user_id = decode_access_token(credentials.credentials)
-    except TokenError as exc:
-        raise AuthenticationError("Invalid or expired token.") from exc
-
-    user = await UserRepository(session).get_by_id(user_id)
-    if user is None or not user.is_active:
-        raise AuthenticationError("Invalid or expired token.")
-
+    user, _ = await authenticate_token(session, credentials.credentials)
     return user
 
 

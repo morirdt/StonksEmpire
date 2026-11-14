@@ -46,6 +46,17 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
             raise
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """The factory itself, for code that opens its own short sessions.
+
+    The WebSocket handler needs this: it authenticates on its first message and
+    again on every re-auth, and a request-scoped session would stay open for
+    the socket's whole life. Tests override it with a factory bound to their
+    rolled-back connection.
+    """
+    return SessionFactory
+
+
 async def check_database() -> bool:
     """Cheap liveness probe used by the readiness endpoint."""
     try:
