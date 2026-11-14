@@ -32,10 +32,19 @@ oversight otherwise:
 ``is_active`` is not a field. A screen over delisted names is not something
 anyone wants, and making it optional invites getting it wrong, so the service
 filters on it unconditionally.
+
+**There is one registry per data source.** ``FIELDS`` is the screener's,
+reading ``daily_bars``, and end-of-day alerts use it unchanged.
+``INTRADAY_FIELDS`` serves intraday alerts: the same registry with the bar
+fields swapped for live ones from ``latest_quotes``, and every indicator kept.
+So "price above its 200-day average" is a ``compare`` between a live price and
+last night's average, and both are in ``price`` units. A registry per source,
+rather than a flag on each entry, keeps "which fields exist here" one lookup.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -43,10 +52,17 @@ from typing import Any
 from sqlalchemy import Numeric, SQLColumnExpression, cast, func
 
 from app.core.enums import AssetType, FieldUnit, FilterKind
-from app.models.market_data import DailyBar, DailyIndicator
+from app.models.market_data import DailyBar, DailyIndicator, LatestQuote
 from app.models.symbol import Symbol
 
-__all__ = ["FIELDS", "FieldSpec", "resolve"]
+__all__ = [
+    "FIELDS",
+    "INTRADAY_FIELDS",
+    "KNOWN_FIELDS",
+    "FieldRegistry",
+    "FieldSpec",
+    "resolve",
+]
 
 _NUMERIC = frozenset({FilterKind.NUMERIC})
 _NUMERIC_COMPARE = frozenset({FilterKind.NUMERIC, FilterKind.COMPARE})
@@ -225,6 +241,109 @@ FIELDS: dict[str, FieldSpec] = dict(
     ]
 )
 
+type FieldRegistry = Mapping[str, FieldSpec]
+
+#: The bar fields an intraday alert cannot use: there is no bar until the close.
+_BAR_ONLY = frozenset(
+    {
+        "close",
+        "open",
+        "high",
+        "low",
+        "volume",
+        "change_percent_1d",
+        "pct_from_sma_50",
+        "pct_from_sma_200",
+        "pct_from_52w_high",
+        "pct_from_52w_low",
+        "atr_percent",
+    }
+)
+
+_LIVE_FIELDS: dict[str, FieldSpec] = dict(
+    [
+        _spec("price", "Price", FieldUnit.PRICE, _NUMERIC_COMPARE, LatestQuote.price),
+        _spec("day_open", "Day open", FieldUnit.PRICE, _NUMERIC_COMPARE, LatestQuote.day_open),
+        _spec("day_high", "Day high", FieldUnit.PRICE, _NUMERIC_COMPARE, LatestQuote.day_high),
+        _spec("day_low", "Day low", FieldUnit.PRICE, _NUMERIC_COMPARE, LatestQuote.day_low),
+        _spec(
+            "volume",
+            "Volume (so far today)",
+            FieldUnit.SHARES,
+            _NUMERIC_COMPARE,
+            LatestQuote.volume,
+        ),
+        _spec(
+            "change_percent",
+            "Change % (today)",
+            FieldUnit.PERCENT,
+            _NUMERIC,
+            LatestQuote.change_percent,
+        ),
+    ]
+)
+
+_LIVE_DERIVED: dict[str, FieldSpec] = dict(
+    [
+        _spec(
+            "pct_from_sma_50",
+            "% from SMA 50",
+            FieldUnit.PERCENT,
+            _NUMERIC,
+            _percent_of(LatestQuote.price - DailyIndicator.sma_50, DailyIndicator.sma_50),
+        ),
+        _spec(
+            "pct_from_sma_200",
+            "% from SMA 200",
+            FieldUnit.PERCENT,
+            _NUMERIC,
+            _percent_of(LatestQuote.price - DailyIndicator.sma_200, DailyIndicator.sma_200),
+        ),
+        _spec(
+            "pct_from_52w_high",
+            "% from 52-week high",
+            FieldUnit.PERCENT,
+            _NUMERIC,
+            _percent_of(LatestQuote.price - DailyIndicator.high_52w, DailyIndicator.high_52w),
+        ),
+        _spec(
+            "pct_from_52w_low",
+            "% from 52-week low",
+            FieldUnit.PERCENT,
+            _NUMERIC,
+            _percent_of(LatestQuote.price - DailyIndicator.low_52w, DailyIndicator.low_52w),
+        ),
+        _spec(
+            "atr_percent",
+            "ATR % of price",
+            FieldUnit.PERCENT,
+            _NUMERIC,
+            _percent_of(DailyIndicator.atr_14, LatestQuote.price),
+        ),
+    ]
+)
+
+#: For intraday alerts: symbol fields, then live quote fields, then every
+#: indicator (joined at the shared ``as_of``), then the derived fields
+#: recomputed against the live price.
+INTRADAY_FIELDS: dict[str, FieldSpec] = {
+    **{k: v for k, v in FIELDS.items() if k in ("ticker", "name", "exchange", "asset_type")},
+    **_LIVE_FIELDS,
+    **{
+        k: v
+        for k, v in FIELDS.items()
+        if k not in _BAR_ONLY and k not in ("ticker", "name", "exchange", "asset_type")
+    },
+    **_LIVE_DERIVED,
+}
+
+#: Every key any registry defines, for validating a tree's *structure* before
+#: the caller checks it against the registry it will actually run in. A key
+#: that two registries share has the same unit and filter kinds in both, which
+#: ``tests/unit/test_screener_dsl.py`` asserts, so either spec answers those
+#: questions.
+KNOWN_FIELDS: dict[str, FieldSpec] = {**INTRADAY_FIELDS, **FIELDS}
+
 #: What every result row carries whether or not the run mentioned it, so the
 #: table is never a column of tickers with nothing beside it.
 CORE_VALUE_FIELDS: tuple[str, ...] = ("close", "volume", "change_percent_1d")
@@ -233,14 +352,14 @@ CORE_VALUE_FIELDS: tuple[str, ...] = ("close", "volume", "change_percent_1d")
 DEFAULT_SORT_FIELD = "ticker"
 
 
-def resolve(key: str) -> FieldSpec:
+def resolve(key: str, registry: FieldRegistry = FIELDS) -> FieldSpec:
     """Look up a field, or raise ``KeyError``.
 
-    Callers reach this only with a key that already passed schema validation,
-    so the ``KeyError`` is a programming error rather than a user error — which
-    is why it is not a domain exception.
+    Callers reach this only with a key that already passed schema validation
+    against ``registry``, so the ``KeyError`` is a programming error rather than
+    a user error — which is why it is not a domain exception.
     """
-    return FIELDS[key]
+    return registry[key]
 
 
 def decimal_or_none(value: Any) -> Decimal | None:

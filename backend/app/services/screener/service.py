@@ -61,6 +61,7 @@ from app.services.screener.fields import (
     CORE_VALUE_FIELDS,
     DEFAULT_SORT_FIELD,
     FIELDS,
+    FieldRegistry,
     FieldSpec,
     decimal_or_none,
     resolve,
@@ -70,13 +71,48 @@ from app.services.screener.fields import (
 _IDENTITY_FIELDS = frozenset({"ticker", "name", "exchange", "asset_type"})
 
 
+async def shared_as_of(session: AsyncSession) -> date | None:
+    """``max(trade_date)`` over ``daily_bars``: the one date a run evaluates at.
+
+    Shared by screens and by end-of-day and screen alerts, so an alert and the
+    screen it came from cannot disagree about which day they are looking at.
+    """
+    return await session.scalar(select(func.max(DailyBar.trade_date)))
+
+
+def universe_select(as_of: date) -> Select[Any]:
+    """Active symbols that have a bar on ``as_of``, with indicators attached.
+
+    The bar join is inner and carries the date in its ``ON`` clause, which
+    is what makes "has a bar on this date" the definition of the universe.
+    The indicator join is outer, so a missing indicator row is a null to be
+    failed by a predicate rather than a symbol that disappears before the
+    predicate runs.
+    """
+    return (
+        # A column is named here only so the query is legal on its own; the
+        # row query replaces it with what it actually wants, and the counts
+        # wrap it in a subquery.
+        select(Symbol.id)
+        .join(
+            DailyBar,
+            and_(DailyBar.symbol_id == Symbol.id, DailyBar.trade_date == as_of),
+        )
+        .outerjoin(
+            DailyIndicator,
+            and_(DailyIndicator.symbol_id == Symbol.id, DailyIndicator.trade_date == as_of),
+        )
+        .where(Symbol.is_active.is_(True))
+    )
+
+
 class ScreenerService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     # ---------------------------------------------------------------- catalogue
 
-    async def catalogue(self) -> ScreenerFieldsResponse:
+    async def catalogue(self, registry: FieldRegistry = FIELDS) -> ScreenerFieldsResponse:
         """The field list the filter builder is generated from.
 
         Served from the same registry the compiler resolves against, so the UI
@@ -86,7 +122,7 @@ class ScreenerService:
         than what a constant once claimed.
         """
         entries: list[ScreenerFieldResponse] = []
-        for spec in FIELDS.values():
+        for spec in registry.values():
             values: list[str] = []
             if spec.supports(FilterKind.CATEGORY):
                 values = (
@@ -106,7 +142,7 @@ class ScreenerService:
 
         return ScreenerFieldsResponse(
             fields=entries,
-            sort_fields=list(FIELDS),
+            sort_fields=list(registry),
             default_sort=ScreenerSort(),
         )
 
@@ -142,16 +178,16 @@ class ScreenerService:
 
         predicate = compile_filters(filters)
         universe = await self._session.scalar(
-            select(func.count()).select_from(self._universe(as_of).subquery())
+            select(func.count()).select_from(universe_select(as_of).subquery())
         )
         matched = await self._session.scalar(
-            select(func.count()).select_from(self._universe(as_of).where(predicate).subquery())
+            select(func.count()).select_from(universe_select(as_of).where(predicate).subquery())
         )
 
         columns = self._columns(filters, sort)
         value_specs = [resolve(column.key) for column in columns]
         query = (
-            self._universe(as_of)
+            universe_select(as_of)
             .where(predicate)
             .with_only_columns(
                 Symbol.ticker,
@@ -189,32 +225,7 @@ class ScreenerService:
 
     async def _as_of(self) -> date | None:
         """The one date the whole run is evaluated at."""
-        return await self._session.scalar(select(func.max(DailyBar.trade_date)))
-
-    def _universe(self, as_of: date) -> Select[Any]:
-        """Active symbols that have a bar on ``as_of``, with indicators attached.
-
-        The bar join is inner and carries the date in its ``ON`` clause, which
-        is what makes "has a bar on this date" the definition of the universe.
-        The indicator join is outer, so a missing indicator row is a null to be
-        failed by a predicate rather than a symbol that disappears before the
-        predicate runs.
-        """
-        return (
-            # A column is named here only so the query is legal on its own; the
-            # row query replaces it with what it actually wants, and the counts
-            # wrap it in a subquery.
-            select(Symbol.id)
-            .join(
-                DailyBar,
-                and_(DailyBar.symbol_id == Symbol.id, DailyBar.trade_date == as_of),
-            )
-            .outerjoin(
-                DailyIndicator,
-                and_(DailyIndicator.symbol_id == Symbol.id, DailyIndicator.trade_date == as_of),
-            )
-            .where(Symbol.is_active.is_(True))
-        )
+        return await shared_as_of(self._session)
 
     def _columns(self, filters: FilterNode, sort: ScreenerSort) -> list[ScreenerColumn]:
         """The fixed core, then every field the run referenced.
@@ -388,4 +399,10 @@ def preset_filters(preset: ScreenerPreset) -> FilterNode:
     return parse_stored_filters(preset.filters)
 
 
-__all__ = ["ScreenerService", "preset_filters", "preset_sort"]
+__all__ = [
+    "ScreenerService",
+    "preset_filters",
+    "preset_sort",
+    "shared_as_of",
+    "universe_select",
+]

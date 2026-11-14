@@ -4,6 +4,96 @@
  */
 
 export interface paths {
+    "/api/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your alerts
+         * @description Every alert, newest first, without parsing stored conditions.
+         */
+        get: operations["alerts_list_alerts"];
+        put?: never;
+        /**
+         * Create an alert
+         * @description A 422 past the active-alert cap, or for a condition the kind cannot use.
+         *
+         *     ``condition_met_now`` says whether the condition already holds, because a
+         *     new alert does not fire on its first evaluation.
+         */
+        post: operations["alerts_create_alert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The fields an alert condition can name
+         * @description The same catalogue shape as ``GET /screener/fields``, for one alert kind.
+         *
+         *     ``end_of_day`` is the screener's registry. ``intraday`` swaps the bar
+         *     fields for live ones (``price``, ``day_high``, …) and keeps every indicator.
+         *     A screen alert has no catalogue, because its condition is its preset's.
+         */
+        get: operations["alerts_alert_fields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{alert_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One alert */
+        get: operations["alerts_get_alert"];
+        put?: never;
+        post?: never;
+        /** Delete an alert */
+        delete: operations["alerts_delete_alert"];
+        options?: never;
+        head?: never;
+        /** Edit or pause an alert */
+        patch: operations["alerts_update_alert"];
+        trace?: never;
+    };
+    "/api/v1/alerts/{alert_id}/triggers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An alert's firing history
+         * @description Newest first, each with a snapshot of the values that made it fire.
+         */
+        get: operations["alerts_alert_triggers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -111,6 +201,83 @@ export interface paths {
          */
         put: operations["chart_put_chart_preferences"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your notifications
+         * @description Newest first. Pass ``next_cursor`` back as ``cursor`` for older ones.
+         */
+        get: operations["notifications_list_notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark every notification read
+         * @description Idempotent: a repeat marks nothing and returns ``updated: 0``.
+         */
+        post: operations["notifications_read_all"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Unread count, for the badge */
+        get: operations["notifications_unread_count"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark one notification read
+         * @description Idempotent: marking a read notification again leaves its ``read_at`` alone.
+         */
+        post: operations["notifications_read_one"];
         delete?: never;
         options?: never;
         head?: never;
@@ -508,6 +675,232 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AlertCreateRequest
+         * @description Create an alert.
+         *
+         *     ``intraday`` and ``end_of_day`` need ``ticker`` and ``condition``. ``screen``
+         *     needs ``preset_id`` and nothing else, because its condition is the preset's.
+         *     ``trigger_mode`` defaults to ``once``, except for screen alerts, which are
+         *     always ``rearm``: they run once a day and fire on new entrants.
+         */
+        AlertCreateRequest: {
+            /** Condition */
+            condition?: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"]) | null;
+            /** Cooldown Minutes */
+            cooldown_minutes?: number | null;
+            kind: components["schemas"]["AlertKind"];
+            /** Name */
+            name: string;
+            /** Preset Id */
+            preset_id?: string | null;
+            /** Ticker */
+            ticker?: string | null;
+            trigger_mode?: components["schemas"]["TriggerMode"] | null;
+        };
+        /** AlertCreateResponse */
+        AlertCreateResponse: {
+            /** Condition */
+            condition: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Output"]) | null;
+            /** Condition Met Now */
+            condition_met_now: boolean | null;
+            /** Condition Summary */
+            condition_summary: string | null;
+            /** Cooldown Minutes */
+            cooldown_minutes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Reason */
+            disabled_reason: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["AlertKind"];
+            /** Last Evaluated At */
+            last_evaluated_at: string | null;
+            /** Last State */
+            last_state: boolean | null;
+            /** Last Triggered At */
+            last_triggered_at: string | null;
+            /** Name */
+            name: string;
+            /** Preset Id */
+            preset_id: string | null;
+            /** Preset Name */
+            preset_name: string | null;
+            status: components["schemas"]["AlertStatus"];
+            /** Ticker */
+            ticker: string | null;
+            trigger_mode: components["schemas"]["TriggerMode"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AlertKind
+         * @description What an alert watches, and so when it is evaluated.
+         *
+         *     ``intraday`` and ``end_of_day`` watch one symbol with a filter tree over the
+         *     intraday and screener field registries respectively. ``screen`` watches a
+         *     saved screener preset and fires on symbols that newly match it.
+         * @enum {string}
+         */
+        AlertKind: "intraday" | "end_of_day" | "screen";
+        /** AlertResponse */
+        AlertResponse: {
+            /** Condition */
+            condition: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Output"]) | null;
+            /** Condition Summary */
+            condition_summary: string | null;
+            /** Cooldown Minutes */
+            cooldown_minutes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Reason */
+            disabled_reason: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["AlertKind"];
+            /** Last Evaluated At */
+            last_evaluated_at: string | null;
+            /** Last State */
+            last_state: boolean | null;
+            /** Last Triggered At */
+            last_triggered_at: string | null;
+            /** Name */
+            name: string;
+            /** Preset Id */
+            preset_id: string | null;
+            /** Preset Name */
+            preset_name: string | null;
+            status: components["schemas"]["AlertStatus"];
+            /** Ticker */
+            ticker: string | null;
+            trigger_mode: components["schemas"]["TriggerMode"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AlertStatus
+         * @description Only ``active`` alerts are evaluated.
+         *
+         *     ``disabled`` is set by the system, never by the user, and always comes with
+         *     a reason: the alert's condition no longer validates, or its symbol was
+         *     delisted.
+         * @enum {string}
+         */
+        AlertStatus: "active" | "paused" | "triggered" | "disabled";
+        /**
+         * AlertSummary
+         * @description What the list shows. Deliberately **without** the parsed condition.
+         *
+         *     ``condition_summary`` is a one-line reading of the stored tree that never
+         *     fails, so a stale alert still lists, and still says what it was watching.
+         */
+        AlertSummary: {
+            /** Condition Summary */
+            condition_summary: string | null;
+            /** Cooldown Minutes */
+            cooldown_minutes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Reason */
+            disabled_reason: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["AlertKind"];
+            /** Last Evaluated At */
+            last_evaluated_at: string | null;
+            /** Last State */
+            last_state: boolean | null;
+            /** Last Triggered At */
+            last_triggered_at: string | null;
+            /** Name */
+            name: string;
+            /** Preset Id */
+            preset_id: string | null;
+            /** Preset Name */
+            preset_name: string | null;
+            status: components["schemas"]["AlertStatus"];
+            /** Ticker */
+            ticker: string | null;
+            trigger_mode: components["schemas"]["TriggerMode"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AlertTriggerPage */
+        AlertTriggerPage: {
+            /** Items */
+            items: components["schemas"]["AlertTriggerResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** AlertTriggerResponse */
+        AlertTriggerResponse: {
+            /** As Of Date */
+            as_of_date: string | null;
+            /** As Of Time */
+            as_of_time: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /**
+             * Triggered At
+             * Format: date-time
+             */
+            triggered_at: string;
+        };
+        /**
+         * AlertUpdateRequest
+         * @description A patch. An omitted field is left alone.
+         *
+         *     Editing the condition resets the alert's state, so the next evaluation
+         *     only records and cannot fire on the edit itself. ``status`` may be set to
+         *     ``active`` or ``paused``. Setting ``active`` on a triggered or disabled
+         *     alert re-arms it, which is the explicit action ``once`` requires.
+         */
+        AlertUpdateRequest: {
+            /** Condition */
+            condition?: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"]) | null;
+            /** Cooldown Minutes */
+            cooldown_minutes?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Status */
+            status?: ("active" | "paused") | null;
+            trigger_mode?: components["schemas"]["TriggerMode"] | null;
+        };
         /** BarResponse */
         BarResponse: {
             /** Close */
@@ -777,6 +1170,44 @@ export interface components {
             version: string;
         };
         /**
+         * NotificationKind
+         * @enum {string}
+         */
+        NotificationKind: "alert_triggered" | "alert_disabled";
+        /** NotificationPage */
+        NotificationPage: {
+            /** Items */
+            items: components["schemas"]["NotificationResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** NotificationResponse */
+        NotificationResponse: {
+            /** Alert Id */
+            alert_id: string | null;
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["NotificationKind"];
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Read At */
+            read_at: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
          * NumericFilter
          * @description ``column <op> :value`` — the ordinary case.
          */
@@ -883,6 +1314,11 @@ export interface components {
             quotes?: {
                 [key: string]: components["schemas"]["QuoteResponse"];
             };
+        };
+        /** ReadAllResponse */
+        ReadAllResponse: {
+            /** Updated */
+            updated: number;
         };
         /** ReadinessResponse */
         ReadinessResponse: {
@@ -1168,6 +1604,21 @@ export interface components {
             token_type: string;
         };
         /**
+         * TriggerMode
+         * @description What happens after an alert fires.
+         *
+         *     ``once`` fires and then sets the alert to ``triggered``; re-arming it is an
+         *     explicit user action. ``rearm`` fires on every new edge, except within the
+         *     cooldown after the last firing.
+         * @enum {string}
+         */
+        TriggerMode: "once" | "rearm";
+        /** UnreadCountResponse */
+        UnreadCountResponse: {
+            /** Count */
+            count: number;
+        };
+        /**
          * UserResponse
          * @description A user as the API returns it.
          *
@@ -1323,6 +1774,219 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    alerts_list_alerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSummary"][];
+                };
+            };
+        };
+    };
+    alerts_create_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_alert_fields: {
+        parameters: {
+            query: {
+                kind: "intraday" | "end_of_day";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenerFieldsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_get_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_delete_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_update_alert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_alert_triggers: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTriggerPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     auth_login: {
         parameters: {
             query?: never;
@@ -1487,6 +2151,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChartPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    notifications_list_notifications: {
+        parameters: {
+            query?: {
+                unread?: boolean;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    notifications_read_all: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadAllResponse"];
+                };
+            };
+        };
+    };
+    notifications_unread_count: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCountResponse"];
+                };
+            };
+        };
+    };
+    notifications_read_one: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
                 };
             };
             /** @description Validation Error */

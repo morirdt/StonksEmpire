@@ -25,9 +25,12 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.jobs.tasks.market_data import refresh_symbols
 from app.models.symbol import Symbol
-from tests.integration.conftest import VALID_PASSWORD, unique_email
+from tests.integration.conftest import VALID_PASSWORD, FrozenClock, unique_email
+from tests.integration.providers import UNIVERSE, Published, RecordingProvider
 
 pytestmark = pytest.mark.integration
 
@@ -87,6 +90,14 @@ CROSS_USER_RESOURCES: list[ResourceCase] = [
     ),
     ResourceCase("DELETE", "/api/v1/screener/presets/{preset_id}"),
     ResourceCase("POST", "/api/v1/screener/presets/{preset_id}/run", body={}),
+    # Phase 5 — alerts, and the one notification path that takes an id. That
+    # one sits under /me/, but naming a notification by id is still the
+    # forge-an-id shape, so it belongs here and not in CALLER_SCOPED_RESOURCES.
+    ResourceCase("GET", "/api/v1/alerts/{alert_id}"),
+    ResourceCase("PATCH", "/api/v1/alerts/{alert_id}", body={"name": "hijacked"}),
+    ResourceCase("DELETE", "/api/v1/alerts/{alert_id}"),
+    ResourceCase("GET", "/api/v1/alerts/{alert_id}/triggers"),
+    ResourceCase("POST", "/api/v1/me/notifications/{notification_id}/read"),
 ]
 
 
@@ -134,6 +145,34 @@ CALLER_SCOPED_RESOURCES: list[CallerScopedCase] = [
 ]
 
 
+@dataclass(frozen=True)
+class CallerScopedEffectCase:
+    """A caller-scoped endpoint that reads, or acts on, rows the caller already has.
+
+    ``CallerScopedCase`` fits a resource the caller writes and reads back. A
+    notification list, its unread count, and "mark all read" have nothing to
+    write. Their failure is reaching another user's rows: listing them,
+    counting them, or marking them read. So the other user holds a
+    notification, the caller makes the request, and the test checks that the
+    caller's response never mentions it and that the other user's view of their
+    own notifications is unchanged.
+    """
+
+    method: str
+    path: str
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: notifications. Endpoints whose identity is the caller and which act
+# on rows something else created.
+# ---------------------------------------------------------------------------
+CALLER_SCOPED_EFFECT_RESOURCES: list[CallerScopedEffectCase] = [
+    CallerScopedEffectCase("GET", "/api/v1/me/notifications"),
+    CallerScopedEffectCase("GET", "/api/v1/me/notifications/unread-count"),
+    CallerScopedEffectCase("POST", "/api/v1/me/notifications/read-all"),
+]
+
+
 async def _register_another_user(client: AsyncClient) -> dict[str, str]:
     """A second account, independent of the ``registered_user`` fixture."""
     email = unique_email("other")
@@ -149,8 +188,10 @@ async def _register_another_user(client: AsyncClient) -> dict[str, str]:
 async def other_users_rows(
     client: AsyncClient,
     seeded_symbols: list[Symbol],
+    session_factory: async_sessionmaker[AsyncSession],
+    clock: FrozenClock,
 ) -> dict[str, str]:
-    """A watchlist with one item and a screener preset, owned by somebody else.
+    """A watchlist, a preset, an alert, and a notification, owned by somebody else.
 
     Built through the API rather than the session, so the ids are exactly what
     a real client would hold — and so a scoping bug in creation shows up here
@@ -184,10 +225,49 @@ async def other_users_rows(
     )
     assert preset.status_code == 201, preset.text
 
+    alert = await client.post(
+        "/api/v1/alerts",
+        json={
+            "name": "Private alert",
+            "kind": "intraday",
+            "ticker": seeded_symbols[0].ticker,
+            "condition": {"kind": "numeric", "field": "price", "op": "gt", "value": "1"},
+        },
+        headers=headers,
+    )
+    assert alert.status_code == 201, alert.text
+
+    # A notification is only ever written by the worker, so make one the same
+    # way: an alert on SPY, then a symbol refresh that delists SPY.
+    doomed = await client.post(
+        "/api/v1/alerts",
+        json={
+            "name": "Doomed alert",
+            "kind": "intraday",
+            "ticker": "SPY",
+            "condition": {"kind": "numeric", "field": "price", "op": "gt", "value": "1"},
+        },
+        headers=headers,
+    )
+    assert doomed.status_code == 201, doomed.text
+    await refresh_symbols(
+        session_factory,
+        clock,
+        provider=RecordingProvider(clock, [s for s in UNIVERSE if s.ticker != "SPY"]),
+        max_deactivation_share=1.0,
+        publish=Published(),
+    )
+    (notification,) = (await client.get("/api/v1/me/notifications", headers=headers)).json()[
+        "items"
+    ]
+
     return {
         "watchlist_id": watchlist_id,
         "item_id": item.json()["id"],
         "preset_id": preset.json()["id"],
+        "alert_id": alert.json()["id"],
+        "notification_id": notification["id"],
+        "access_token": other["access_token"],
     }
 
 
@@ -242,6 +322,59 @@ async def test_a_caller_scoped_write_cannot_reach_another_users_row(
 
     still_mine = await auth_client.get(case.path)
     assert still_mine.json() == mine.json()
+
+
+@pytest.mark.parametrize(
+    "case", CALLER_SCOPED_EFFECT_RESOURCES, ids=lambda c: f"{c.method} {c.path}"
+)
+async def test_a_caller_scoped_request_never_reaches_another_users_rows(
+    client: AsyncClient,
+    auth_client: AsyncClient,
+    other_users_rows: dict[str, str],
+    case: CallerScopedEffectCase,
+) -> None:
+    other_headers = {"Authorization": f"Bearer {other_users_rows['access_token']}"}
+
+    async def their_view() -> tuple[Any, Any]:
+        listing = await client.get("/api/v1/me/notifications", headers=other_headers)
+        count = await client.get("/api/v1/me/notifications/unread-count", headers=other_headers)
+        return listing.json(), count.json()
+
+    before = await their_view()
+    assert before[1] == {"count": 1}, "the other user starts with one unread notification"
+
+    response = await auth_client.request(case.method, case.path)
+
+    assert response.status_code == 200, response.text
+    assert other_users_rows["notification_id"] not in response.text, (
+        f"{case.method} {case.path} showed the caller another user's notification"
+    )
+    assert response.json() != {"count": 1}, "the caller has no notifications of their own"
+    assert await their_view() == before, (
+        f"{case.method} {case.path} changed another user's notifications"
+    )
+
+
+async def test_an_alert_cannot_watch_another_users_preset(
+    auth_client: AsyncClient,
+    other_users_rows: dict[str, str],
+) -> None:
+    """The preset is named in the body, not the path, so the harness above cannot see it."""
+    response = await auth_client.post(
+        "/api/v1/alerts",
+        json={"name": "Snooping", "kind": "screen", "preset_id": other_users_rows["preset_id"]},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_another_users_alert_is_absent_from_the_listing(
+    auth_client: AsyncClient,
+    other_users_rows: dict[str, str],
+) -> None:
+    alerts = (await auth_client.get("/api/v1/alerts")).json()
+
+    assert other_users_rows["alert_id"] not in {a["id"] for a in alerts}
 
 
 async def test_another_users_watchlist_is_404_not_403(

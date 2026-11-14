@@ -166,6 +166,15 @@ class WorkerSettings(BaseModel):
     max_ingest_gap_days: int = Field(default=30, ge=1)
 
 
+class AlertsSettings(BaseModel):
+    """Per-user alert limits and defaults."""
+
+    #: Each intraday alert can add a symbol to the worker's hot set, and every
+    #: hot-set symbol is re-quoted each minute against the provider's quota.
+    max_active_per_user: int = Field(default=50, ge=1)
+    default_cooldown_minutes: int = Field(default=60, ge=5, le=1440)
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Anchored to the repo, not the process CWD: the API runs from
@@ -204,6 +213,7 @@ class Settings(BaseSettings):
     market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
+    alerts: AlertsSettings = Field(default_factory=AlertsSettings)
 
     @property
     def is_prod(self) -> bool:

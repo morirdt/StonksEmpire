@@ -37,6 +37,7 @@ from app.jobs import heartbeat
 from app.jobs.locks import JobLock
 from app.jobs.runner import run_job
 from app.jobs.tasks.market_data import ingest_eod, poll_quotes, refresh_symbols
+from app.jobs.tasks.notifications import prune_notifications
 
 __all__ = ["build_scheduler", "main"]
 
@@ -114,6 +115,18 @@ def build_scheduler() -> AsyncIOScheduler:
         CronTrigger(day_of_week="sun", hour=6, minute=0, timezone=MARKET_TZ),
         id="refresh_symbols",
         name="refresh_symbols",
+        misfire_grace_time=3600,
+        **common,
+    )
+    scheduler.add_job(
+        _locked(
+            "prune_notifications",
+            JobLock.PRUNE_NOTIFICATIONS,
+            lambda: prune_notifications(SessionFactory, utc_now),
+        ),
+        CronTrigger(hour=3, minute=0, timezone=MARKET_TZ),
+        id="prune_notifications",
+        name="prune_notifications",
         misfire_grace_time=3600,
         **common,
     )

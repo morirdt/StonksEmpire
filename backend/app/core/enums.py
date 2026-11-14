@@ -159,3 +159,47 @@ class FieldUnit(StrEnum):
 class SortDirection(StrEnum):
     ASC = "asc"
     DESC = "desc"
+
+
+class AlertKind(StrEnum):
+    """What an alert watches, and so when it is evaluated.
+
+    ``intraday`` and ``end_of_day`` watch one symbol with a filter tree over the
+    intraday and screener field registries respectively. ``screen`` watches a
+    saved screener preset and fires on symbols that newly match it.
+    """
+
+    INTRADAY = "intraday"
+    END_OF_DAY = "end_of_day"
+    SCREEN = "screen"
+
+
+class TriggerMode(StrEnum):
+    """What happens after an alert fires.
+
+    ``once`` fires and then sets the alert to ``triggered``; re-arming it is an
+    explicit user action. ``rearm`` fires on every new edge, except within the
+    cooldown after the last firing.
+    """
+
+    ONCE = "once"
+    REARM = "rearm"
+
+
+class AlertStatus(StrEnum):
+    """Only ``active`` alerts are evaluated.
+
+    ``disabled`` is set by the system, never by the user, and always comes with
+    a reason: the alert's condition no longer validates, or its symbol was
+    delisted.
+    """
+
+    ACTIVE = "active"
+    PAUSED = "paused"
+    TRIGGERED = "triggered"
+    DISABLED = "disabled"
+
+
+class NotificationKind(StrEnum):
+    ALERT_TRIGGERED = "alert_triggered"
+    ALERT_DISABLED = "alert_disabled"

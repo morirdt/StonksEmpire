@@ -15,7 +15,9 @@ from sqlalchemy import Float, case, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import AlertKind, AlertStatus
 from app.integrations.market_data.base import SymbolInfo
+from app.models.alert import Alert
 from app.models.symbol import Symbol
 from app.models.watchlist import WatchlistItem
 
@@ -125,15 +127,21 @@ class SymbolRepository:
         return list(result.scalars())
 
     async def list_hot_set(self) -> list[Symbol]:
-        """The symbols worth re-quoting every minute: those somebody is watching.
+        """The symbols worth re-quoting every minute.
 
-        Not the whole universe: polling 533 symbols a minute against a quota of
-        60 requests a minute would spend the whole session rate-limited.
+        That is every symbol on a watchlist, plus every symbol with an active
+        intraday alert. Not the whole universe: polling 533 symbols a minute
+        against a quota of 60 requests a minute would spend the whole session
+        rate-limited.
         """
-        watched = select(WatchlistItem.symbol_id).distinct()
+        watched = select(WatchlistItem.symbol_id)
+        alerted = select(Alert.symbol_id).where(
+            Alert.kind == AlertKind.INTRADAY.value,
+            Alert.status == AlertStatus.ACTIVE.value,
+        )
         result = await self._session.execute(
             select(Symbol)
-            .where(Symbol.is_active.is_(True), Symbol.id.in_(watched))
+            .where(Symbol.is_active.is_(True), Symbol.id.in_(watched.union(alerted)))
             .order_by(Symbol.ticker)
         )
         return list(result.scalars())

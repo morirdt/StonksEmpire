@@ -34,7 +34,9 @@ from app.integrations.market_data import get_market_data_provider
 from app.integrations.market_data.base import MarketDataProvider
 from app.repositories.bar_repository import BarRepository
 from app.repositories.symbol_repository import SymbolRepository
+from app.services.alerts.firing import AlertEvaluator, FiringReport, publish_hints
 from app.services.market_data_service import MarketDataService
+from app.services.screener.service import shared_as_of
 
 __all__ = [
     "IngestResult",
@@ -54,10 +56,32 @@ type SessionFactory = async_sessionmaker[AsyncSession]
 
 
 @dataclass(frozen=True, slots=True)
+class AlertCounts:
+    """The alert side of a job's result, for its log line."""
+
+    evaluated: int = 0
+    fired: int = 0
+    suppressed: int = 0
+    disabled: int = 0
+    failed: int = 0
+
+    @classmethod
+    def of(cls, report: FiringReport) -> AlertCounts:
+        return cls(
+            evaluated=report.evaluated,
+            fired=report.fired,
+            suppressed=report.suppressed,
+            disabled=report.disabled,
+            failed=report.failed,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PollResult:
     skipped: str | None = None
     hot_set: int = 0
     refreshed: int = 0
+    alerts: AlertCounts = field(default_factory=AlertCounts)
 
 
 async def poll_quotes(
@@ -68,15 +92,19 @@ async def poll_quotes(
     provider: MarketDataProvider | None = None,
     publish: Publisher = publish_event,
 ) -> PollResult:
-    """Re-quote the hot set, then publish a ``quotes_updated`` hint.
+    """Re-quote the hot set, evaluate intraday alerts, then publish hints.
+
+    The hot set is every watched symbol plus every symbol with an active
+    intraday alert. Alerts are evaluated only against quotes **this run**
+    fetched: ``fetched_at >= now``, where ``now`` is when the run started.
 
     Runs while the market is open. The 16:05 ``closing_run`` instead runs on any
     trading day, and picks up the closing prices that the last in-session poll,
     a minute or more before 16:00, could not have seen.
 
-    A provider failure refreshes nothing and publishes nothing. The grid keeps
-    serving stale quotes with an honest ``fetched_at``, which is right for a
-    grid.
+    A provider failure refreshes nothing, evaluates nothing, and publishes
+    nothing. The grid keeps serving stale quotes with an honest ``fetched_at``,
+    which is right for a grid. An alert must not fire on such a quote.
     """
     now = clock()
     if closing_run:
@@ -93,6 +121,15 @@ async def poll_quotes(
         service = MarketDataService(session, provider=provider)
         refreshed = await service.refresh_quotes(hot_set, fetched_at=clock())
 
+        report = FiringReport()
+        if refreshed:
+            report = await AlertEvaluator(session, now).run_intraday(
+                list(refreshed),
+                fetched_since=now,
+                indicators_as_of=await shared_as_of(session),
+            )
+            await session.commit()
+
     if refreshed:
         by_id = {s.id: s.ticker for s in hot_set}
         await publish(
@@ -102,7 +139,8 @@ async def poll_quotes(
                 "tickers": sorted(by_id[sid] for sid in refreshed),
             }
         )
-    return PollResult(hot_set=len(hot_set), refreshed=len(refreshed))
+    await publish_hints(report, publish)
+    return PollResult(hot_set=len(hot_set), refreshed=len(refreshed), alerts=AlertCounts.of(report))
 
 
 # ------------------------------------------------------------------ ingest eod
@@ -119,6 +157,8 @@ class IngestResult:
     no_history: list[str] = field(default_factory=list)
     too_far_behind: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    as_of: date | None = None
+    alerts: AlertCounts = field(default_factory=AlertCounts)
 
 
 async def ingest_eod(
@@ -127,8 +167,11 @@ async def ingest_eod(
     *,
     provider: MarketDataProvider | None = None,
     max_gap_days: int | None = None,
+    publish: Publisher = publish_event,
 ) -> IngestResult:
-    """Top up each active symbol's bars through the last completed session.
+    """Top up bars, then evaluate end-of-day and screen alerts at the new ``as_of``.
+
+    Each active symbol is topped up through the last completed session.
 
     Incremental and bounded. A symbol is fetched from the day after its last
     stored bar, and only if that bar is at most ``max_gap_days`` old. A symbol
@@ -183,6 +226,18 @@ async def ingest_eod(
             ingested += 1
             bars += stored
 
+        # The shared as_of, as the screener uses: not `target`, which a
+        # universe that failed to ingest would not actually have reached.
+        as_of = await shared_as_of(session)
+        report = FiringReport()
+        if as_of is not None:
+            evaluator = AlertEvaluator(session, now)
+            report = (await evaluator.run_end_of_day(as_of)).merge(
+                await evaluator.run_screens(as_of)
+            )
+            await session.commit()
+
+    await publish_hints(report, publish)
     if no_history or too_far:
         logger.warning(
             "ingest_needs_backfill",
@@ -199,6 +254,8 @@ async def ingest_eod(
         no_history=no_history,
         too_far_behind=too_far,
         failed=failed,
+        as_of=as_of,
+        alerts=AlertCounts.of(report),
     )
 
 
@@ -217,6 +274,7 @@ class RefreshResult:
     listed: int = 0
     upserted: int = 0
     deactivated: list[str] = field(default_factory=list)
+    alerts_disabled: int = 0
 
 
 async def refresh_symbols(
@@ -225,15 +283,18 @@ async def refresh_symbols(
     *,
     provider: MarketDataProvider | None = None,
     max_deactivation_share: float = _MAX_DEACTIVATION_SHARE,
+    publish: Publisher = publish_event,
 ) -> RefreshResult:
     """Upsert the provider's universe, and deactivate what it no longer lists.
 
     Deactivates and never deletes, because watchlists and alerts reference
-    symbols by foreign key. Refuses outright when the listing is empty or would
-    deactivate more than ``max_deactivation_share`` of the universe, since
-    either is likelier to be a provider fault than a market event.
+    symbols by foreign key. Every alert on a deactivated symbol is disabled,
+    and its owner is told why: deleting the alerts would remove them silently.
+
+    Refuses outright when the listing is empty or would deactivate more than
+    ``max_deactivation_share`` of the universe, since either is likelier to be
+    a provider fault than a market event.
     """
-    del clock  # Unused: the refresh is not gated on market hours.
     source = provider or get_market_data_provider()
     listed = list(await source.list_symbols())
     if not listed:
@@ -258,9 +319,18 @@ async def refresh_symbols(
 
         upserted = await repository.upsert_many(listed[:cap])
         deactivated = await repository.deactivate_missing(sorted(listed_tickers))
+        report = await AlertEvaluator(session, clock()).disable_on_symbols(
+            [s.id for s in deactivated]
+        )
         await session.commit()
 
+    await publish_hints(report, publish)
     tickers = sorted(s.ticker for s in deactivated)
     if tickers:
         logger.info("symbols_deactivated", tickers=tickers)
-    return RefreshResult(listed=len(listed), upserted=upserted, deactivated=tickers)
+    return RefreshResult(
+        listed=len(listed),
+        upserted=upserted,
+        deactivated=tickers,
+        alerts_disabled=report.disabled,
+    )

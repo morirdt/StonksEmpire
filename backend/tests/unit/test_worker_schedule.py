@@ -19,6 +19,7 @@ def test_every_job_is_registered() -> None:
         "poll_quotes_closing",
         "ingest_eod",
         "refresh_symbols",
+        "prune_notifications",
         "heartbeat",
     }
 

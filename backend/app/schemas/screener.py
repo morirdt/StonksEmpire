@@ -55,7 +55,7 @@ from app.core.enums import (
     SortDirection,
 )
 from app.core.exceptions import ValidationError
-from app.services.screener.fields import DEFAULT_SORT_FIELD, FIELDS
+from app.services.screener.fields import DEFAULT_SORT_FIELD, FIELDS, KNOWN_FIELDS, FieldRegistry
 
 # ---------------------------------------------------------------------- caps
 
@@ -108,7 +108,14 @@ FilterValue = Annotated[
 
 
 def _known_field(key: str) -> str:
-    if key not in FIELDS:
+    """A key some registry defines. Which registry is the caller's to check.
+
+    Nodes validate structure, units, and filter kinds against every known
+    field. Each entry point then checks that the tree uses only its own
+    registry (:func:`require_registry`), so ``price`` is valid in an intraday
+    alert and is still a 422 in a screen.
+    """
+    if key not in KNOWN_FIELDS:
         raise ValueError(f"Unknown field {key!r}. See GET /screener/fields for the catalogue.")
     return key
 
@@ -117,7 +124,7 @@ FieldKey = Annotated[str, BeforeValidator(_known_field)]
 
 
 def _require_kind(key: str, kind: FilterKind) -> None:
-    spec = FIELDS[key]
+    spec = KNOWN_FIELDS[key]
     if not spec.supports(kind):
         supported = ", ".join(sorted(k.value for k in spec.kinds)) or "no filters"
         raise ValueError(
@@ -181,7 +188,7 @@ class CompareFilter(BaseModel):
 
     @model_validator(mode="after")
     def _units_match(self) -> CompareFilter:
-        left, right = FIELDS[self.left].unit, FIELDS[self.right].unit
+        left, right = KNOWN_FIELDS[self.left].unit, KNOWN_FIELDS[self.right].unit
         if left is not right:
             raise ValueError(
                 f"Cannot compare {self.left!r} ({left.value}) with "
@@ -216,7 +223,7 @@ class CategoryFilter(BaseModel):
         unrecognised exchange is simply a screen that matches nothing, which is
         the honest answer.
         """
-        permitted = FIELDS[self.field].category_values
+        permitted = KNOWN_FIELDS[self.field].category_values
         if permitted is None:
             return self
         unknown = [v for v in self.values if v not in permitted]
@@ -268,7 +275,7 @@ def _walk(node: Any, depth: int) -> tuple[int, int]:
     return nodes, deepest
 
 
-def _enforce_caps(node: Any) -> Any:
+def enforce_caps(node: Any) -> Any:
     nodes, depth = _walk(node, 1 if isinstance(node, GroupFilter) else 0)
     if depth > MAX_DEPTH:
         raise ValueError(f"Filter tree is nested {depth} groups deep; the limit is {MAX_DEPTH}.")
@@ -277,12 +284,55 @@ def _enforce_caps(node: Any) -> Any:
     return node
 
 
+def tree_fields(node: Any) -> list[str]:
+    """Every field key a validated tree names, in first-seen order."""
+    seen: dict[str, None] = {}
+
+    def walk(current: Any) -> None:
+        if isinstance(current, NumericFilter | CategoryFilter):
+            seen.setdefault(current.field, None)
+        elif isinstance(current, CompareFilter):
+            seen.setdefault(current.left, None)
+            seen.setdefault(current.right, None)
+        elif isinstance(current, GroupFilter):
+            for child in current.children:
+                walk(child)
+
+    walk(node)
+    return list(seen)
+
+
+def require_registry(node: Any, registry: FieldRegistry, *, catalogue: str) -> Any:
+    """Reject a tree that names a field ``registry`` does not have.
+
+    ``catalogue`` is the endpoint that lists this registry, so the message can
+    say where to look.
+    """
+    foreign = [key for key in tree_fields(node) if key not in registry]
+    if foreign:
+        raise ValueError(
+            f"Field {foreign[0]!r} is not available here. See {catalogue} for the catalogue."
+        )
+    return node
+
+
+def _screener_tree(node: Any) -> Any:
+    return require_registry(enforce_caps(node), FIELDS, catalogue="GET /screener/fields")
+
+
 # -------------------------------------------------------------------- sorting
 
 
 class ScreenerSort(BaseModel):
     field: FieldKey = DEFAULT_SORT_FIELD
     direction: SortDirection = SortDirection.ASC
+
+    @field_validator("field", mode="after")
+    @classmethod
+    def _screenable(cls, key: str) -> str:
+        if key not in FIELDS:
+            raise ValueError(f"Field {key!r} is not available here. See GET /screener/fields.")
+        return key
 
 
 def _default_sort() -> ScreenerSort:
@@ -305,7 +355,7 @@ class ScreenerRunRequest(BaseModel):
     @field_validator("filters", mode="after")
     @classmethod
     def _within_caps(cls, node: Any) -> Any:
-        return _enforce_caps(node)
+        return _screener_tree(node)
 
 
 # ------------------------------------------------------------------ catalogue
@@ -393,7 +443,7 @@ class ScreenerPresetCreateRequest(BaseModel):
     @field_validator("filters", mode="after")
     @classmethod
     def _within_caps(cls, node: Any) -> Any:
-        return _enforce_caps(node)
+        return _screener_tree(node)
 
 
 class ScreenerPresetUpdateRequest(BaseModel):
@@ -406,7 +456,7 @@ class ScreenerPresetUpdateRequest(BaseModel):
     @field_validator("filters", mode="after")
     @classmethod
     def _within_caps(cls, node: Any) -> Any:
-        return None if node is None else _enforce_caps(node)
+        return None if node is None else _screener_tree(node)
 
 
 class ScreenerPresetSummary(BaseModel):
@@ -441,7 +491,13 @@ class ScreenerPresetRunRequest(BaseModel):
 _TREE_ADAPTER: TypeAdapter[Any] = TypeAdapter(FilterNode)
 
 
-def parse_stored_filters(raw: Any) -> FilterNode:
+def parse_stored_filters(
+    raw: Any,
+    registry: FieldRegistry = FIELDS,
+    *,
+    catalogue: str = "GET /screener/fields",
+    what: str = "preset",
+) -> FilterNode:
     """Re-validate a stored filter tree, or raise a 422 that says why.
 
     A preset's tree lives in ``JSONB``, so the database guarantees nothing about
@@ -452,12 +508,27 @@ def parse_stored_filters(raw: Any) -> FilterNode:
     preset cannot take the whole screener page down with it.
     """
     try:
-        return cast(FilterNode, _enforce_caps(_TREE_ADAPTER.validate_python(raw)))
+        tree = enforce_caps(_TREE_ADAPTER.validate_python(raw))
+        return cast(FilterNode, require_registry(tree, registry, catalogue=catalogue))
     except (PydanticValidationError, ValueError) as exc:
         raise ValidationError(
-            "This preset's filters are no longer valid — a field or operator it "
+            f"This {what}'s filters are no longer valid — a field or operator it "
             f"names has changed. ({_first_message(exc)})"
         ) from exc
+
+
+def parse_tree(raw: Any, registry: FieldRegistry, *, catalogue: str) -> FilterNode:
+    """Validate a tree arriving on the wire against ``registry``.
+
+    For request models whose registry depends on another field, such as an
+    alert's ``kind``. Raises ``ValueError``, which Pydantic reports as a 422 at
+    the field that called it.
+    """
+    try:
+        tree = enforce_caps(_TREE_ADAPTER.validate_python(raw))
+    except PydanticValidationError as exc:
+        raise ValueError(_first_message(exc)) from exc
+    return cast(FilterNode, require_registry(tree, registry, catalogue=catalogue))
 
 
 def _first_message(exc: Exception) -> str:
