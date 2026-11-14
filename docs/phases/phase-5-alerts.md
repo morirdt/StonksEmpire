@@ -643,34 +643,47 @@ queue rather than a schedule.
 
 ## Definition of done
 
-- [ ] `make check` green; `make migration-check` reports no drift; migrations
+- [x] `make check` green; `make migration-check` reports no drift; migrations
       round-trip `downgrade base` → `upgrade head`.
 - [ ] `make up` starts `db`, `redis`, `api`, `worker`, and `web` on a
       fresh clone with **no** credentials, and all report healthy.
-- [ ] Provider rate limit and breaker are shared through Redis; stopping Redis
+- [x] Provider rate limit and breaker are shared through Redis; stopping Redis
       degrades `/ready` without failing it, and login limiting falls back rather
       than opening.
 - [ ] The worker runs every job under an advisory lock; starting a second
       worker produces `job_skipped` lines and no duplicate writes.
-- [ ] One real `ingest_eod` run over the full universe, **runtime recorded in
+- [x] One real `ingest_eod` run over the full universe, **runtime recorded in
       the PR** alongside Phase 4's 8m19s backfill.
-- [ ] `poll_quotes` hot-set size and per-run duration logged; timing with 200
+- [x] `poll_quotes` hot-set size and per-run duration logged; timing with 200
       active alerts recorded in the PR.
 - [ ] In a browser, during market hours (or with the worker's clock pinned
       inside a session): create an intraday alert on a ticker just past its
       current `Fake` price, watch it fire within a few minutes, see the bell
       update **without a reload**. Stop the worker; the alert's "last checked" visibly ages and `/ready` names
       `worker`.
-- [ ] The watchlist grid updates from a push while the socket is up and falls
+- [x] The watchlist grid updates from a push while the socket is up and falls
       back to polling when it is down.
-- [ ] Every cross-user and caller-scoped entry listed in *Testing* is in its
+- [x] Every cross-user and caller-scoped entry listed in *Testing* is in its
       registry.
-- [ ] `schema.ts` regenerated and committed.
-- [ ] `docs/ROADMAP.md` Phase 5 marked complete; `CLAUDE.md` updated with the
+- [x] `schema.ts` regenerated and committed.
+- [x] `docs/ROADMAP.md` Phase 5 marked complete; `CLAUDE.md` updated with the
       conventions this phase settles, including the Redis rule, the clock rule,
       advisory-lock keys, edge-triggering, and push-as-invalidation; the stale
       "Phase 5" comments in `rate_limit.py`, the two scripts, the `Makefile`,
       and `useWatchlists.ts` rewritten to describe what is now true.
+
+**Not yet verified as worded** (open items above):
+
+- *`make up` on a fresh clone*: every service is healthy on this machine's
+  existing stack; a clean clone has not been tried.
+- *A second worker*: the lock is covered by
+  `tests/integration/test_jobs.py` (a held lock gives `job_skipped` and no
+  writes); two live worker containers have not been run side by side.
+- *In a browser*: the same path was run live without one. An alert created
+  through the API, a real worker poll with `DEV_CLOCK_OFFSET` set, and the push
+  on a real WebSocket after 146 s. The bell updating on a push is covered by
+  `NotificationBell.test.tsx`, and stopping the worker visibly degrades
+  `/ready`.
 
 ## Open questions
 

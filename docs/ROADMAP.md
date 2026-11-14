@@ -16,7 +16,7 @@ spec because agents trust it.
 | 2 | Market data foundation + watchlists | ✅ complete — [spec](phases/phase-2-market-data.md) |
 | 3 | Analysis & charting | ✅ complete — [spec](phases/phase-3-charting.md) |
 | 4 | Screeners | ✅ complete — [spec](phases/phase-4-screeners.md) |
-| 5 | Alerts, background jobs, real-time | 🟡 spec written — [spec](phases/phase-5-alerts.md) |
+| 5 | Alerts, background jobs, real-time | ✅ complete — [spec](phases/phase-5-alerts.md) |
 | 6 | Trading log & performance insights | ⬜ |
 | 7 | Polish, hardening, deploy | ⬜ |
 
@@ -180,7 +180,7 @@ Three things worth carrying forward:
   hundred of four hundred matches and present them as the top hundred. There is
   no pagination on purpose: a screen returning 412 of 530 wants narrowing.
 
-## Phase 5 — Alerts, jobs, real-time
+## Phase 5 — Alerts, jobs, real-time ✅
 
 **Spec: [`docs/phases/phase-5-alerts.md`](phases/phase-5-alerts.md)**
 
@@ -193,6 +193,31 @@ notifications.
 > written: emailing an unverified address lets anyone aim alerts at someone
 > else's inbox, so email has to arrive together with verification, which Phase 7
 > already owns.
+
+What the phase settled is recorded in `CLAUDE.md` under *Worker, alerts, and
+real-time conventions*. Four things worth carrying forward:
+
+- **The nightly ingest over the full universe takes 79.6 s**: 533 symbols, one
+  bar each, with indicators recomputed over each symbol's whole stored series
+  (Phase 4's two-year backfill took 8m19s). A second run the same night finds
+  everything up to date in 1.8 s. That is nowhere near long enough to justify
+  bounding the recompute to a warm-up window, so it stays whole-series.
+- **A poll with 200 active intraday alerts takes 0.72–0.84 s** of upserts and
+  evaluations: 201 hot-set symbols, one statement and one savepoint per alert,
+  measured from the WSL host against the Docker Postgres. One statement per
+  alert stays; `UNION ALL` batching is not needed. With `Fake` the full poll is
+  about 5 s, but that is `Fake` regenerating each ticker's series since 2015 per
+  quote, which a real provider's batch call does not do.
+- **Verified live, not only in tests.** An intraday alert created through the API
+  fired from a real worker poll and reached a real WebSocket as a push in 146 s.
+  Stopping Redis or the worker degrades `/ready` without failing it. The check
+  used `DEV_CLOCK_OFFSET` to put the market clock inside a session on a
+  weekend. That run also caught a bug the tests had missed:
+  `condition_met_now` was answering from a days-old cached quote.
+- **The dev database needed a backfill first.** Its bars had stopped at
+  2026-09-11, more than the 30-day gap the nightly ingest will close by itself,
+  so every symbol was correctly logged as needing `make backfill`. Expect the
+  same after any long break from a dev stack.
 
 ## Phase 6 — Trading log & analytics
 
