@@ -41,6 +41,7 @@ from decimal import Decimal
 from random import Random
 from typing import Final
 
+from app.core.clock import utc_now
 from app.core.enums import AssetType
 from app.core.exceptions import NotFoundError
 from app.core.market_calendar import (
@@ -64,10 +65,6 @@ _CENT = Decimal("0.01")
 
 #: 09:30 to 16:00 is 390 minutes. Index 0 is the open, index 390 the close.
 SESSION_MINUTES: Final = 390
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _seed_for(ticker: str) -> int:
@@ -165,7 +162,7 @@ class FakeMarketDataProvider:
         self,
         symbols: Sequence[SymbolInfo] | None = None,
         *,
-        clock: Callable[[], datetime] = _utc_now,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._symbols = list(symbols if symbols is not None else load_universe())
         self._by_ticker = {s.ticker: s for s in self._symbols}

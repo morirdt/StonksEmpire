@@ -207,6 +207,14 @@ class Settings(BaseSettings):
     sentry_dsn: SecretStr | None = None
     sentry_traces_sample_rate: float = 0.0
 
+    # --- development ---
+    #: Shifts this process's clock (``app.core.clock.utc_now``) by a fixed
+    #: amount, e.g. ``-P3D`` to make a Saturday afternoon read as Wednesday's
+    #: session. It exists so intraday alerts can be watched firing when the
+    #: market is shut. Set it in .env so ``api`` and ``worker`` agree on the
+    #: time. Refused in production.
+    dev_clock_offset: timedelta | None = None
+
     # --- nested groups ---
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
@@ -246,6 +254,8 @@ class Settings(BaseSettings):
             raise ValueError("DB__PASSWORD must be set in production")
         if self.debug:
             raise ValueError("DEBUG must be false in production")
+        if self.dev_clock_offset is not None:
+            raise ValueError("DEV_CLOCK_OFFSET must not be set in production")
         return self
 
 

@@ -13,27 +13,37 @@ on Postgres, so that a database outage does not also report the worker as dead.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Final
 
 from redis.asyncio import Redis
 
-from app.core.clock import Clock, utc_now
+from app.core.clock import Clock
 from app.core.redis import REDIS_UNAVAILABLE, get_redis
 
 __all__ = ["HEARTBEAT_KEY", "MAX_HEARTBEAT_AGE", "beat", "worker_is_alive"]
+
+
+def _wall_clock() -> datetime:
+    """Real time, never ``DEV_CLOCK_OFFSET``-shifted.
+
+    Liveness is about now, not about market time. A heartbeat on the shifted
+    clock would read as days old to any process without the same offset.
+    """
+    return datetime.now(UTC)
+
 
 HEARTBEAT_KEY: Final = "worker:heartbeat"
 MAX_HEARTBEAT_AGE: Final = timedelta(seconds=60)
 
 
-async def beat(clock: Clock = utc_now, redis: Redis | None = None) -> None:
+async def beat(clock: Clock = _wall_clock, redis: Redis | None = None) -> None:
     """Record that the worker is alive now."""
     client = redis or get_redis()
     await client.set(HEARTBEAT_KEY, clock().isoformat(), ex=int(MAX_HEARTBEAT_AGE.total_seconds()))
 
 
-async def worker_is_alive(clock: Clock = utc_now, redis: Redis | None = None) -> bool:
+async def worker_is_alive(clock: Clock = _wall_clock, redis: Redis | None = None) -> bool:
     """Is there a heartbeat younger than ``MAX_HEARTBEAT_AGE``?
 
     The TTL already drops a dead worker's key. The age check also catches a

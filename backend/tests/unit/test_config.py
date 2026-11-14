@@ -116,3 +116,14 @@ def test_the_other_providers_key_does_not_satisfy_the_check() -> None:
 
 def test_quote_ttl_is_exposed_as_a_timedelta() -> None:
     assert MarketDataSettings(quote_ttl_seconds=90).quote_ttl.total_seconds() == 90
+
+
+def test_a_dev_clock_offset_is_refused_in_production() -> None:
+    with pytest.raises(PydanticValidationError, match="DEV_CLOCK_OFFSET"):
+        Settings(
+            _env_file=None,
+            environment="prod",
+            secret_key="x" * 40,
+            db={"password": "p"},
+            dev_clock_offset="-P3D",
+        )

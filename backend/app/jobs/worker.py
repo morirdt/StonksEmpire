@@ -55,7 +55,7 @@ def _locked(
 
 async def _beat() -> None:
     try:
-        await heartbeat.beat(utc_now)
+        await heartbeat.beat()
     except REDIS_UNAVAILABLE as exc:
         # /ready will report the worker as down, which is the honest answer:
         # nobody can tell it is alive.

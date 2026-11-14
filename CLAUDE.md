@@ -16,7 +16,7 @@ and will leave you inventing details that are already decided.
 
 ```bash
 make setup           # .env + backend venv + frontend deps
-make up              # full stack in Docker; make up-db for Postgres only
+make up              # full stack in Docker; make up-db for Postgres + Redis only
 make migrate         # alembic upgrade head
 make revision m="…"  # autogenerate a migration
 make check           # everything CI runs: lint + typecheck + test
@@ -49,6 +49,12 @@ integration is enabled.
   with `ModuleNotFoundError` and Vite fails to resolve the new import. `-V`
   renews anonymous volumes; the Postgres volume is named and unaffected. Never
   use `down -v` for this — it destroys the database.
+- **The worker does not hot-reload.** It mounts the source like `api`, but a
+  scheduler that restarted on every save would keep resetting its intervals.
+  After editing a job, run `docker compose restart worker`.
+- **Tests need Redis as well as Postgres** (`make up-db` starts both). They use
+  Redis database 15 and flush it per test, so the dev stack's database 0 is
+  never touched.
 - The working tree is on a Windows drive mounted into WSL, where small-file I/O
   is ~150× slower than the Linux filesystem. `pnpm install` takes minutes; this
   is expected. `frontend/.npmrc` sets `node-linker=hoisted` — do **not** add
@@ -242,6 +248,69 @@ depends on these.
   one preset naming a removed column must not take the page down — while
   opening or running one is a 422 naming the offending field.
 
+### Worker, alerts, and real-time conventions
+
+Settled in Phase 5. Everything that runs on a schedule, or pushes to a browser,
+depends on these.
+
+- **Postgres is the source of truth and Redis never is.** Redis holds rate-limit
+  counts, breaker state, the worker heartbeat, and pub/sub hints. Every Redis
+  caller has an in-process fallback and goes through the shared `RedisGuard`
+  (`app/core/redis.py`), which logs an outage once and skips Redis for a few
+  seconds after a failure. The login limiter falls back to per-process limits,
+  **never to no limit**. `/ready` reports `redis` and `worker` as degraded,
+  never fatal.
+- **The provider rate limit and the breaker are shared through Redis**, because
+  they meter one account across `api` and `worker`. The bucket is one Lua script
+  (read, refill, take, write); never split it into a read and a write from
+  Python.
+- **Time is an input.** Job logic takes a `Clock` (`app/core/clock.py`) and never
+  calls `datetime.now()`, so tests run at frozen instants. Market time goes
+  through `utc_now`, which honours `DEV_CLOCK_OFFSET` outside production;
+  liveness (the heartbeat) uses the real clock. Market hours, holidays, and DST
+  live only in `app/core/market_calendar.py`. Jobs fire on plain schedules and
+  ask the calendar first, because cron cannot say "unless it is Good Friday".
+- **Jobs are plain functions of `(session_factory, clock)`** in
+  `app/jobs/tasks/`, and know nothing about APScheduler. `app/jobs/worker.py` is
+  wiring only. **Every run takes a session-level advisory lock** on a dedicated
+  connection. Keys are fixed integers in `app/jobs/locks.py`, never `hash()`,
+  which is salted per process. A new job gets a new number; numbers are never
+  reused. The heartbeat is the one exception: it writes nothing to Postgres.
+- **Alerts reuse the screener's DSL, compiler, and universe**, with one field
+  registry per source: `FIELDS` (bars, also used by end-of-day alerts) and
+  `INTRADAY_FIELDS` (live quotes plus indicators). Nodes validate structure
+  against every known key; **each entry point then checks its own registry**
+  with `require_registry`. A key shared by two registries must mean the same
+  unit and filter kinds in both, and a test asserts it. Never write a second
+  evaluator in Python: two evaluators means two sets of null rules.
+- **Firing is edge-triggered** (`app/services/alerts/evaluation.py`, pure). It
+  fires on false → true only. NULL leaves `last_state` alone. The first
+  definite evaluation of a new, edited, or resumed alert only records. The
+  cooldown suppresses firing but still tracks state. Intraday alerts are
+  evaluated **only against quotes fetched in this run**, so a provider outage
+  evaluates nothing rather than firing on stale prices.
+- **One bad alert stops nothing.** Each alert is evaluated in its own savepoint.
+  A stale tree or a delisted symbol disables that alert with a reason and a
+  notification, and the run continues. A firing writes the alert's state, an
+  `alert_triggers` snapshot, and the notification **in one transaction**.
+  Nothing outside Postgres happens inside it.
+- **A push is a hint, not data.** `quotes_updated` carries tickers and
+  `notification_created` carries ids, and both are published **after** the
+  commit. The client only invalidates query keys and refetches over REST
+  (`lib/realtime/connection.ts`); it never writes pushed data into the cache.
+  `notification_created` goes to its owner's sockets only, and that is tested
+  as a cross-user case.
+- **The socket authenticates by first message and lives as long as its token**
+  (`app/api/v1/routes/ws.py`). It uses `authenticate_token`, the same function
+  as `CurrentUser`. On 4401 the client joins the shared refresh in
+  `lib/api/client.ts` and never starts its own. A socket that cannot subscribe
+  closes with 1013 rather than staying open and silent.
+- **Polling is the fallback, not dead code.** Anything that used to poll keeps
+  its interval and applies it only while `useRealtimeConnected()` is false.
+- Lists that grow without bound (notifications, trigger history) are
+  **cursor-paginated** on `(timestamp, id)`. An offset skips or repeats rows
+  when new ones arrive at the top.
+
 ### Testing conventions
 
 - Database tests live in `tests/integration/` and use the fixtures in its
@@ -264,6 +333,22 @@ depends on these.
 - **One contract suite runs against every provider**, parameterized in
   `tests/unit/test_market_data_contract.py`. Adding a provider means adding one
   entry to `PROVIDERS`; if it does not pass unchanged, the seam has leaked.
+  Every provider is built with a frozen clock: "no bar before the close" and
+  "the closing quote equals the bar" are contract.
+- **Jobs are tested by calling them** with the `session_factory` and `clock`
+  fixtures from `tests/integration/conftest.py`. The factory's sessions join the
+  test's rolled-back transaction. Job-test providers and publishers live in
+  `tests/integration/providers.py`.
+- `CALLER_SCOPED_EFFECT_RESOURCES` is the third registry in the cross-user
+  harness. It is for `/me/...` endpoints that read or act on rows something else
+  created (the notification list, count, and read-all): the other user's view
+  must be unchanged and never appear in the caller's response.
+- **WebSocket tests run in-process** with `httpx-ws` on the test's own loop.
+  Open the client inside the test, never in a fixture: its anyio task group
+  must be entered and exited in the same task.
+- **A `/ready` test about some other check uses `database_check_passes`.** The
+  real database check runs on the app's pooled engine, whose connections
+  outlive the test's event loop.
 
 ### Dependency policy
 
@@ -274,6 +359,11 @@ Some popular packages are deliberately banned here:
 - **Never `python-jose`** — stale, with a CVE history. Use `PyJWT`.
 - **Never `moment`, `create-react-app`, or `react-router-dom`** (v7+ renamed the
   package to `react-router`).
+- **Never `aioredis`**: it merged into `redis` (`redis.asyncio`) and is dead.
+- **APScheduler stays below 4.0.** 4.x is an alpha with an entirely different
+  API. Do not upgrade across that line in passing.
+- **Never `exchange_calendars`**: it pulls in pandas. Holidays come from
+  `holidays` (NYSE calendar).
 
 ### Database and migrations
 
