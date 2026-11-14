@@ -13,7 +13,7 @@ pytestmark = pytest.mark.integration
 
 
 async def test_repeated_failed_logins_are_throttled(client: AsyncClient) -> None:
-    """Blunts credential stuffing without needing Redis yet."""
+    """Blunts credential stuffing. The bucket is shared through Redis."""
     limit = get_settings().auth.login_attempts_per_minute
     payload = {"email": unique_email(), "password": "a-wrong-password-here"}
 
@@ -46,4 +46,4 @@ async def test_registration_is_throttled(client: AsyncClient) -> None:
 
 async def test_the_limiter_is_reset_between_tests(client: AsyncClient) -> None:
     """Guards the fixture: module-level state would otherwise leak forward."""
-    assert auth_routes._login_limiter.allow("probe") is True
+    assert await auth_routes._login_limiter.allow("probe") is True

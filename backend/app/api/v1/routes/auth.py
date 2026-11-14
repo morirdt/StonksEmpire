@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request, Response, status
 from app.api.deps import Client, CurrentUser, DbSession
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError, RateLimitError
-from app.core.rate_limit import TokenBucketLimiter
+from app.core.rate_limit import SharedRateLimiter
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService, IssuedTokens
@@ -24,14 +24,18 @@ REFRESH_COOKIE_NAME = "refresh_token"
 
 _settings = get_settings()
 
-# Per-process buckets; see app/core/rate_limit for why that is acceptable here.
-_login_limiter = TokenBucketLimiter(
+# Shared through Redis so `api` replicas do not each hand out a full allowance.
+# While Redis is down they fall back to per-process buckets, and never to no
+# limit at all; see app/core/rate_limit.
+_login_limiter = SharedRateLimiter(
     capacity=_settings.auth.login_attempts_per_minute,
     window_seconds=60,
+    prefix="ratelimit:login",
 )
-_register_limiter = TokenBucketLimiter(
+_register_limiter = SharedRateLimiter(
     capacity=_settings.auth.register_attempts_per_hour,
     window_seconds=3600,
+    prefix="ratelimit:register",
 )
 
 
@@ -74,7 +78,7 @@ async def register(
     session: DbSession,
     client: Client,
 ) -> TokenResponse:
-    if not _register_limiter.allow(_client_key(request)):
+    if not await _register_limiter.allow(_client_key(request)):
         raise RateLimitError("Too many registration attempts. Try again later.")
 
     issued = await AuthService(session).register(
@@ -94,7 +98,7 @@ async def login(
     session: DbSession,
     client: Client,
 ) -> TokenResponse:
-    if not _login_limiter.allow(_client_key(request)):
+    if not await _login_limiter.allow(_client_key(request)):
         raise RateLimitError("Too many login attempts. Try again later.")
 
     issued = await AuthService(session).login(

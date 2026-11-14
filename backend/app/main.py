@@ -16,6 +16,7 @@ from app.api.middleware import AccessLogMiddleware, CorrelationIdMiddleware
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.core.redis import close_redis
 from app.db.session import dispose_engine
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -56,6 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         database=settings.db.safe_url,
     )
     yield
+    await close_redis()
     await dispose_engine()
     logger.info("application_stopped")
 

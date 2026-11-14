@@ -16,6 +16,7 @@ inside something we can throw away.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import pathlib
 import uuid
 from collections.abc import AsyncGenerator, Generator
@@ -30,6 +31,7 @@ from sqlalchemy.pool import NullPool
 from alembic import command
 from app.api.v1.routes import auth as auth_routes
 from app.core.config import get_settings
+from app.core.redis import REDIS_UNAVAILABLE, get_redis
 from app.db.session import get_db
 from app.main import create_app
 from app.models.symbol import Symbol
@@ -73,10 +75,22 @@ def migrated_database() -> Generator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _reset_rate_limiters() -> Generator[None]:
-    """The limiters are module-level, so state would leak between tests."""
-    auth_routes._login_limiter.reset()
-    auth_routes._register_limiter.reset()
+async def _clean_redis() -> AsyncGenerator[None]:
+    """Empty the test Redis database before each test.
+
+    Postgres state is rolled back per test, but Redis has no transaction to roll
+    back, so it is flushed instead. That covers the login limiter, the provider
+    bucket, and the breaker in one call. It is database 15, set in
+    ``tests/conftest.py``, so the dev stack's data is never touched. The
+    in-process fallback buckets are reset as well.
+    """
+    # os.environ outranks conftest's defaults, so a shell that exports the dev
+    # REDIS__URL would aim this FLUSHDB at real data. Refuse rather than guess.
+    assert get_settings().is_testing, "refusing to FLUSHDB outside a test environment"
+    with contextlib.suppress(*REDIS_UNAVAILABLE):
+        await get_redis().flushdb()
+    await auth_routes._login_limiter.reset()
+    await auth_routes._register_limiter.reset()
     yield
 
 

@@ -675,13 +675,11 @@ queue rather than a schedule.
 ## Open questions
 
 Several calls were made while writing this spec and are recorded above rather
-than left implicit. One changes the phase's size and is worth confirming before
-building it:
+than left implicit.
 
-- **Screen alerts are in.** Phase 4 promised them "in Phase 5", and given the
-  compiler and the nightly job they are cheap. They are also last in the build
-  order and touch nothing else, so cutting them costs the promise and nothing
-  more.
+**Confirmed before building: screen alerts are in.** Phase 4 promised them "in
+Phase 5", and given the compiler and the nightly job they are cheap. They stay
+last in the build order, because they touch nothing else.
 
 **Decided after review: email is out.** The first draft pulled email
 verification forward from Phase 7 so alerts could be emailed. That made the

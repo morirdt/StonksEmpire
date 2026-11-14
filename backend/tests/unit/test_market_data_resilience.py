@@ -3,6 +3,11 @@
 Nothing here sleeps. The breaker takes an injectable clock and the retry layer
 an injectable sleep, so the reset window and the backoff are driven directly —
 a suite that waits out a 60-second breaker window is a suite nobody runs.
+
+The breaker scenarios take their state store from the ``breaker_store`` fixture.
+Here it is process memory. ``tests/integration/test_redis_shared_state.py``
+imports the same scenarios and overrides the fixture with the Redis store, so
+both homes for the state are held to one state machine.
 """
 
 from __future__ import annotations
@@ -15,11 +20,13 @@ import httpx
 import pytest
 
 from app.core.exceptions import ExternalServiceError, NotFoundError
-from app.core.rate_limit import TokenBucketLimiter
+from app.core.rate_limit import SharedRateLimiter
 from app.integrations.market_data.base import Bar, Quote, SymbolInfo
 from app.integrations.market_data.resilience import (
     BreakerState,
+    BreakerStore,
     CircuitBreaker,
+    InMemoryBreakerStore,
     RateLimitGate,
     ResilientProvider,
     TransientProviderError,
@@ -27,8 +34,18 @@ from app.integrations.market_data.resilience import (
 )
 
 
+@pytest.fixture
+def breaker_store() -> BreakerStore:
+    return InMemoryBreakerStore()
+
+
+def in_process_limiter(capacity: int) -> SharedRateLimiter:
+    """The shared limiter with no Redis behind it: purely its in-process bucket."""
+    return SharedRateLimiter(capacity=capacity, window_seconds=60.0, prefix="test", redis=None)
+
+
 class FakeClock:
-    """A monotonic clock the test advances by hand."""
+    """A clock the test advances by hand."""
 
     def __init__(self) -> None:
         self.now = 1_000.0
@@ -98,7 +115,7 @@ def build(
         clock=clock or FakeClock(),
     )
     gate = RateLimitGate(
-        limiter=TokenBucketLimiter(capacity=capacity, window_seconds=60.0),
+        limiter=in_process_limiter(capacity),
         key=inner.name,
         sleep=_no_sleep,
     )
@@ -193,70 +210,123 @@ async def test_does_not_retry_an_unknown_ticker() -> None:
 # ----------------------------------------------------------------------- breaker
 
 
-def test_breaker_opens_only_after_consecutive_failures() -> None:
+async def test_breaker_opens_only_after_consecutive_failures(
+    breaker_store: BreakerStore,
+) -> None:
     clock = FakeClock()
-    breaker = CircuitBreaker(name="p", failure_threshold=3, reset_seconds=60.0, clock=clock)
+    breaker = CircuitBreaker(
+        name="p", failure_threshold=3, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
 
-    breaker.record_failure()
-    breaker.record_failure()
-    assert breaker.state is BreakerState.CLOSED
+    await breaker.record_failure()
+    await breaker.record_failure()
+    assert await breaker.state() is BreakerState.CLOSED
 
-    breaker.record_failure()
-    assert breaker.state is BreakerState.OPEN
-    assert not breaker.allow()
-
-
-def test_a_success_resets_the_failure_run() -> None:
-    breaker = CircuitBreaker(name="p", failure_threshold=3, reset_seconds=60.0, clock=FakeClock())
-
-    breaker.record_failure()
-    breaker.record_failure()
-    breaker.record_success()
-    breaker.record_failure()
-    breaker.record_failure()
-
-    assert breaker.state is BreakerState.CLOSED, "the counter is consecutive, not cumulative"
+    await breaker.record_failure()
+    assert await breaker.state() is BreakerState.OPEN
+    assert not await breaker.allow()
 
 
-def test_breaker_allows_one_trial_after_the_reset_window() -> None:
+async def test_a_success_resets_the_failure_run(breaker_store: BreakerStore) -> None:
+    breaker = CircuitBreaker(
+        name="p", failure_threshold=3, reset_seconds=60.0, clock=FakeClock(), store=breaker_store
+    )
+
+    await breaker.record_failure()
+    await breaker.record_failure()
+    await breaker.record_success()
+    await breaker.record_failure()
+    await breaker.record_failure()
+
+    assert await breaker.state() is BreakerState.CLOSED, "the counter is consecutive"
+
+
+async def test_breaker_allows_one_trial_after_the_reset_window(
+    breaker_store: BreakerStore,
+) -> None:
     clock = FakeClock()
-    breaker = CircuitBreaker(name="p", failure_threshold=1, reset_seconds=60.0, clock=clock)
-    breaker.record_failure()
+    breaker = CircuitBreaker(
+        name="p", failure_threshold=1, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
+    await breaker.record_failure()
 
-    assert not breaker.allow()
+    assert not await breaker.allow()
 
     clock.advance(60.0)
-    assert breaker.allow(), "the window has elapsed, so one probe gets through"
-    assert not breaker.allow(), "but only one — a burst must not all become probes"
+    assert await breaker.allow(), "the window has elapsed, so one probe gets through"
+    assert not await breaker.allow(), "but only one — a burst must not all become probes"
+    assert await breaker.state() is BreakerState.HALF_OPEN
 
 
-def test_a_failed_trial_reopens_for_another_full_window() -> None:
+async def test_a_failed_trial_reopens_for_another_full_window(
+    breaker_store: BreakerStore,
+) -> None:
     clock = FakeClock()
-    breaker = CircuitBreaker(name="p", failure_threshold=1, reset_seconds=60.0, clock=clock)
-    breaker.record_failure()
+    breaker = CircuitBreaker(
+        name="p", failure_threshold=1, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
+    await breaker.record_failure()
     clock.advance(60.0)
-    assert breaker.allow()
+    assert await breaker.allow()
 
-    breaker.record_failure()
+    await breaker.record_failure()
 
-    assert breaker.state is BreakerState.OPEN
+    assert await breaker.state() is BreakerState.OPEN
     clock.advance(59.0)
-    assert not breaker.allow()
+    assert not await breaker.allow()
     clock.advance(1.0)
-    assert breaker.allow()
+    assert await breaker.allow()
 
 
-def test_a_successful_trial_closes_the_breaker() -> None:
+async def test_a_successful_trial_closes_the_breaker(breaker_store: BreakerStore) -> None:
     clock = FakeClock()
-    breaker = CircuitBreaker(name="p", failure_threshold=1, reset_seconds=60.0, clock=clock)
-    breaker.record_failure()
+    breaker = CircuitBreaker(
+        name="p", failure_threshold=1, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
+    await breaker.record_failure()
     clock.advance(60.0)
-    breaker.allow()
+    await breaker.allow()
 
-    breaker.record_success()
+    await breaker.record_success()
 
-    assert breaker.state is BreakerState.CLOSED
-    assert breaker.allow()
+    assert await breaker.state() is BreakerState.CLOSED
+    assert await breaker.allow()
+
+
+async def test_an_abandoned_trial_goes_stale_after_a_window(breaker_store: BreakerStore) -> None:
+    """A process that dies mid-trial must not block every other probe forever.
+
+    In process memory this could never happen, because the state dies with the
+    process. Shared state does not, so a claimed trial expires after one reset
+    window.
+    """
+    clock = FakeClock()
+    breaker = CircuitBreaker(
+        name="p", failure_threshold=1, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
+    await breaker.record_failure()
+    clock.advance(60.0)
+    assert await breaker.allow(), "the trial is claimed, and its result never arrives"
+
+    clock.advance(59.0)
+    assert not await breaker.allow()
+    clock.advance(1.0)
+    assert await breaker.allow(), "a window later, someone else may probe"
+
+
+async def test_breakers_are_independent_per_provider(breaker_store: BreakerStore) -> None:
+    clock = FakeClock()
+    a = CircuitBreaker(
+        name="a", failure_threshold=1, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
+    b = CircuitBreaker(
+        name="b", failure_threshold=1, reset_seconds=60.0, clock=clock, store=breaker_store
+    )
+
+    await a.record_failure()
+
+    assert await a.state() is BreakerState.OPEN
+    assert await b.state() is BreakerState.CLOSED
 
 
 async def test_an_open_breaker_fails_fast_without_calling_the_provider() -> None:
@@ -287,7 +357,7 @@ async def test_an_unknown_ticker_does_not_open_the_breaker() -> None:
         with pytest.raises(NotFoundError):
             await wrapped.get_quote("NOPE")
 
-    assert breaker.state is BreakerState.CLOSED
+    assert await breaker.state() is BreakerState.CLOSED
 
 
 async def test_recovery_after_the_window_reaches_the_provider_again() -> None:
@@ -302,13 +372,13 @@ async def test_recovery_after_the_window_reaches_the_provider_again() -> None:
     for _ in range(2):
         with pytest.raises(TransientProviderError):
             await wrapped.get_quote("AAPL")
-    assert breaker.state is BreakerState.OPEN
+    assert await breaker.state() is BreakerState.OPEN
 
     clock.advance(30.0)
     quote = await wrapped.get_quote("AAPL")
 
     assert quote.price == Decimal("100.00")
-    assert breaker.state is BreakerState.CLOSED
+    assert await breaker.state() is BreakerState.CLOSED
 
 
 # -------------------------------------------------------------------- rate limit
@@ -320,9 +390,9 @@ async def test_the_gate_waits_for_capacity_rather_than_rejecting() -> None:
 
     async def record(seconds: float) -> None:
         slept.append(seconds)
-        limiter.reset()  # stand in for time passing
+        await limiter.reset()  # stand in for time passing
 
-    limiter = TokenBucketLimiter(capacity=2, window_seconds=60.0)
+    limiter = in_process_limiter(2)
     gate = RateLimitGate(limiter=limiter, key="p", sleep=record)
 
     for _ in range(3):
@@ -333,7 +403,7 @@ async def test_the_gate_waits_for_capacity_rather_than_rejecting() -> None:
 
 
 async def test_every_retry_attempt_spends_a_token() -> None:
-    limiter = TokenBucketLimiter(capacity=10, window_seconds=60.0)
+    limiter = in_process_limiter(10)
     inner = ScriptedProvider([TransientProviderError("wobble")])
     wrapped = ResilientProvider(
         inner=inner,
@@ -345,6 +415,6 @@ async def test_every_retry_attempt_spends_a_token() -> None:
 
     await wrapped.get_quote("AAPL")
 
-    assert limiter.time_until_token("p") == 0.0
-    remaining = [limiter.allow("p") for _ in range(10)]
+    assert await limiter.time_until_token("p") == 0.0
+    remaining = [await limiter.allow("p") for _ in range(10)]
     assert remaining.count(True) == 8, "two calls were made, so two tokens are gone"

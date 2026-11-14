@@ -4,6 +4,10 @@ One place decides which provider the app talks to and wraps it in the
 resilience layer, so no caller ever constructs a provider itself. The circuit
 breakers live here too, because ``/ready`` needs to report on them and the
 service layer needs to trip them — and neither should own the other.
+
+Both the breaker and the rate limit are held in Redis, because ``api`` and
+``worker`` spend one provider account between them. Each falls back to process
+memory while Redis is unreachable.
 """
 
 from __future__ import annotations
@@ -11,12 +15,13 @@ from __future__ import annotations
 from functools import lru_cache
 
 from app.core.config import MarketDataSettings, get_settings
-from app.core.rate_limit import TokenBucketLimiter
+from app.core.rate_limit import SharedRateLimiter
 from app.integrations.market_data.base import Bar, MarketDataProvider, Quote, SymbolInfo
 from app.integrations.market_data.fake import FakeMarketDataProvider
 from app.integrations.market_data.resilience import (
     BreakerState,
     CircuitBreaker,
+    FallbackBreakerStore,
     RateLimitGate,
     ResilientProvider,
 )
@@ -67,6 +72,7 @@ def get_market_data_provider() -> MarketDataProvider:
         name=inner.name,
         failure_threshold=settings.breaker_failure_threshold,
         reset_seconds=settings.breaker_reset_seconds,
+        store=FallbackBreakerStore(),
     )
     _BREAKERS[inner.name] = breaker
 
@@ -74,9 +80,12 @@ def get_market_data_provider() -> MarketDataProvider:
         inner=inner,
         breaker=breaker,
         gate=RateLimitGate(
-            limiter=TokenBucketLimiter(
+            # A quota on the provider *account*, so it must be shared: with a
+            # bucket per process, api and worker would spend twice the budget.
+            limiter=SharedRateLimiter(
                 capacity=settings.requests_per_minute,
                 window_seconds=60.0,
+                prefix="ratelimit:provider",
             ),
             key=inner.name,
         ),
@@ -84,12 +93,12 @@ def get_market_data_provider() -> MarketDataProvider:
     )
 
 
-def breaker_states() -> dict[str, BreakerState]:
+async def breaker_states() -> dict[str, BreakerState]:
     """Current breaker state per provider, for readiness reporting."""
-    return {name: breaker.state for name, breaker in _BREAKERS.items()}
+    return {name: await breaker.state() for name, breaker in _BREAKERS.items()}
 
 
-def market_data_is_healthy() -> bool:
+async def market_data_is_healthy() -> bool:
     """True when no provider's breaker is fully open.
 
     A provider being down is a *degraded* dependency, not a fatal one: the app
@@ -97,7 +106,8 @@ def market_data_is_healthy() -> bool:
     the upstream. ``/ready`` reports this by name but must not go red on it,
     or one third-party hiccup takes the whole deployment out of rotation.
     """
-    return all(state is not BreakerState.OPEN for state in breaker_states().values())
+    states = await breaker_states()
+    return all(state is not BreakerState.OPEN for state in states.values())
 
 
 def reset_market_data_provider() -> None:

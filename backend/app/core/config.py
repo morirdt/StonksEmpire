@@ -64,7 +64,8 @@ class AuthSettings(BaseModel):
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
 
-    # Rate limits, per client IP. In-process only until Redis arrives.
+    # Rate limits, per client IP. Shared through Redis, with an in-process
+    # fallback while Redis is unreachable (see app/core/rate_limit.py).
     login_attempts_per_minute: int = 10
     register_attempts_per_hour: int = 5
 
@@ -128,6 +129,27 @@ class MarketDataSettings(BaseModel):
         return self
 
 
+class RedisSettings(BaseModel):
+    """Redis connection settings.
+
+    Redis holds rate-limit counts, breaker state, the worker heartbeat, and
+    pub/sub hints, and is never the source of truth for anything a user can see.
+    Losing it degrades the app, so every caller has an in-process fallback.
+    """
+
+    url: str = "redis://localhost:6379/0"
+
+    #: Kept short on purpose. A Redis call that hangs stalls the login request
+    #: or provider call waiting on it, and the fallback only takes over once
+    #: the call has failed.
+    timeout_seconds: float = 0.5
+
+    #: After a failed call, how long to go straight to the fallback before
+    #: trying Redis again. Without it, an unreachable host costs every request
+    #: a full connect timeout.
+    retry_after_seconds: float = 5.0
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Anchored to the repo, not the process CWD: the API runs from
@@ -164,6 +186,7 @@ class Settings(BaseSettings):
     db: DatabaseSettings = Field(default_factory=DatabaseSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     market_data: MarketDataSettings = Field(default_factory=MarketDataSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
 
     @property
     def is_prod(self) -> bool:

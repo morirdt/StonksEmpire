@@ -21,6 +21,20 @@ services:
       retries: 10
       start_period: 10s
 
+  redis:
+    image: redis:8-alpine
+    # Nothing in Redis is a source of truth (see app/core/redis.py), so there
+    # is no volume and no persistence: a restart costs rate-limit counts and
+    # breaker state, both of which rebuild themselves.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build:
       context: ./backend
@@ -31,11 +45,15 @@ services:
       # on its native port, overriding the host-facing values in .env.
       DB__HOST: db
       DB__PORT: 5432
+      REDIS__URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      # Started, not healthy: the API runs without Redis, just degraded.
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 10s

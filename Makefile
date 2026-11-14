@@ -35,8 +35,8 @@ up: ## Start the full stack (db + api + web)
 	$(COMPOSE) up -d --build
 
 .PHONY: up-db
-up-db: ## Start Postgres only (for running the API on the host)
-	$(COMPOSE) up -d db
+up-db: ## Start Postgres and Redis (for running the API or tests on the host)
+	$(COMPOSE) up -d db redis
 
 .PHONY: down
 down: ## Stop the stack

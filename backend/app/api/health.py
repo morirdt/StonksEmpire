@@ -10,6 +10,7 @@ from fastapi import APIRouter, Response, status
 from pydantic import BaseModel
 
 from app.core.config import get_settings
+from app.core.redis import redis_is_healthy
 from app.db.session import check_database
 from app.integrations.market_data import market_data_is_healthy
 
@@ -43,7 +44,9 @@ async def health() -> HealthResponse:
 #: Dependencies the app genuinely cannot serve without. Everything else is
 #: reported by name and allowed to fail without taking the process out of
 #: rotation — a market data provider having a bad afternoon must not look
-#: identical to a lost database connection.
+#: identical to a lost database connection. Redis is out for the same reason:
+#: every Redis caller has an in-process fallback, so losing it degrades the app
+#: without stopping it.
 _REQUIRED_CHECKS = ("database",)
 
 
@@ -58,7 +61,8 @@ async def ready(response: Response) -> ReadinessResponse:
     """
     checks = {
         "database": await check_database(),
-        "market_data": market_data_is_healthy(),
+        "market_data": await market_data_is_healthy(),
+        "redis": await redis_is_healthy(),
     }
     ok = all(checks[name] for name in _REQUIRED_CHECKS)
     if not ok:

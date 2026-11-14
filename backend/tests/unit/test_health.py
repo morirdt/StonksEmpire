@@ -7,6 +7,20 @@ import app.api.health as health_module
 from app.core.config import get_settings
 
 
+async def _healthy() -> bool:
+    return True
+
+
+@pytest.fixture(autouse=True)
+def _soft_dependencies_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit tests have no Redis, so its check is healthy unless a test says not.
+
+    The real check, against a real Redis, runs in the integration suite.
+    """
+    monkeypatch.setattr(health_module, "redis_is_healthy", _healthy)
+    monkeypatch.setattr(health_module, "market_data_is_healthy", _healthy)
+
+
 async def test_health_reports_ok(client: AsyncClient) -> None:
     response = await client.get("/health")
 
@@ -55,6 +69,9 @@ async def test_ready_returns_503_when_database_is_down(
     async def down() -> bool:
         return False
 
+    async def up() -> bool:
+        return True
+
     monkeypatch.setattr(health_module, "check_database", down)
 
     response = await client.get("/ready")
@@ -87,8 +104,12 @@ async def test_a_degraded_provider_is_reported_but_stays_ready(
     async def ok() -> bool:
         return True
 
+    async def down() -> bool:
+        return False
+
     monkeypatch.setattr(health_module, "check_database", ok)
-    monkeypatch.setattr(health_module, "market_data_is_healthy", lambda: False)
+    monkeypatch.setattr(health_module, "market_data_is_healthy", down)
+    monkeypatch.setattr(health_module, "redis_is_healthy", ok)
 
     response = await client.get("/ready")
 
@@ -108,10 +129,35 @@ async def test_a_lost_database_is_still_fatal(
     async def down() -> bool:
         return False
 
+    async def up() -> bool:
+        return True
+
     monkeypatch.setattr(health_module, "check_database", down)
-    monkeypatch.setattr(health_module, "market_data_is_healthy", lambda: True)
+    monkeypatch.setattr(health_module, "market_data_is_healthy", up)
+    monkeypatch.setattr(health_module, "redis_is_healthy", up)
 
     response = await client.get("/ready")
 
     assert response.status_code == 503
     assert response.json()["status"] == "not_ready"
+
+
+async def test_a_lost_redis_is_degraded_not_fatal(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every Redis caller has an in-process fallback, so losing it is survivable."""
+
+    async def down() -> bool:
+        return False
+
+    monkeypatch.setattr(health_module, "check_database", _healthy)
+    monkeypatch.setattr(health_module, "redis_is_healthy", down)
+
+    response = await client.get("/ready")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["checks"]["redis"] is False
+    assert body["degraded"] == ["redis"]
