@@ -1,0 +1,51 @@
+# Install once with: uv tool install pre-commit && pre-commit install
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.3
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      # mypy runs locally rather than from the mirror so it type-checks against
+      # the project's own resolved dependencies.
+      - id: mypy
+        name: mypy (backend)
+        entry: bash -c 'cd backend && uv run mypy'
+        language: system
+        types: [python]
+        files: ^backend/app/
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier (frontend)
+        entry: bash -c 'cd frontend && pnpm exec prettier --write'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|json|css|md)$
+
+      - id: eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && pnpm exec eslint --fix'
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx)$
