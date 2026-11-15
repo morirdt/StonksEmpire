@@ -3,17 +3,20 @@ import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Popover from '@mui/material/Popover';
 import Stack from '@mui/material/Stack';
+import Switch from '@mui/material/Switch';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import { Link as RouterLink, useNavigate } from 'react-router';
 import { formatAge } from '@/lib/format';
+import { useDesktopNotifications } from './useDesktopNotifications';
 import {
   notificationHref,
   useMarkAllRead,
@@ -37,6 +40,7 @@ export function NotificationBell() {
   const recent = useRecentNotifications(anchor !== null);
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
+  const desktop = useDesktopNotifications(count.data);
 
   const unread = count.data ?? 0;
   const label = unread === 0 ? 'Notifications' : `Notifications, ${unread} unread`;
@@ -83,6 +87,28 @@ export function NotificationBell() {
             Mark all read
           </Button>
         </Stack>
+        {desktop.permission !== 'unsupported' && (
+          <Box sx={{ px: 2, pb: 1 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={desktop.active}
+                  disabled={desktop.permission === 'denied'}
+                  onChange={(event) =>
+                    event.target.checked ? void desktop.enable() : desktop.disable()
+                  }
+                />
+              }
+              label={<Typography variant="body2">Desktop alerts</Typography>}
+            />
+            {desktop.permission === 'denied' && (
+              <Typography variant="caption" color="text.secondary" component="p">
+                Blocked by the browser. Allow notifications for this site in its settings.
+              </Typography>
+            )}
+          </Box>
+        )}
         <Divider />
         {recent.data?.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
