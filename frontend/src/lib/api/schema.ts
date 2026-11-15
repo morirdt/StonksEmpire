@@ -690,8 +690,6 @@ export interface components {
             /** Cooldown Minutes */
             cooldown_minutes?: number | null;
             kind: components["schemas"]["AlertKind"];
-            /** Name */
-            name: string;
             /** Preset Id */
             preset_id?: string | null;
             /** Ticker */
@@ -727,8 +725,6 @@ export interface components {
             last_state: boolean | null;
             /** Last Triggered At */
             last_triggered_at: string | null;
-            /** Name */
-            name: string;
             /** Preset Id */
             preset_id: string | null;
             /** Preset Name */
@@ -780,8 +776,6 @@ export interface components {
             last_state: boolean | null;
             /** Last Triggered At */
             last_triggered_at: string | null;
-            /** Name */
-            name: string;
             /** Preset Id */
             preset_id: string | null;
             /** Preset Name */
@@ -837,8 +831,6 @@ export interface components {
             last_state: boolean | null;
             /** Last Triggered At */
             last_triggered_at: string | null;
-            /** Name */
-            name: string;
             /** Preset Id */
             preset_id: string | null;
             /** Preset Name */
@@ -895,8 +887,6 @@ export interface components {
             condition?: (components["schemas"]["NumericFilter"] | components["schemas"]["CompareFilter"] | components["schemas"]["CategoryFilter"] | components["schemas"]["GroupFilter-Input"]) | null;
             /** Cooldown Minutes */
             cooldown_minutes?: number | null;
-            /** Name */
-            name?: string | null;
             /** Status */
             status?: ("active" | "paused") | null;
             trigger_mode?: components["schemas"]["TriggerMode"] | null;

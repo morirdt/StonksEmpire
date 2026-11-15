@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography';
 import { Link as RouterLink, useParams } from 'react-router';
 import { formatAge, formatPrice } from '@/lib/format';
 import { useAlert, useAlertTriggers, type AlertTrigger } from '../api/useAlerts';
+import { alertLabel } from '../components/alertLabel';
 
 /**
  * One firing, and the values that caused it.
@@ -102,12 +103,7 @@ export function AlertHistoryPage() {
       {alert.isError && <Alert severity="error">{alert.error.message}</Alert>}
       {alert.data && (
         <Stack spacing={0.5}>
-          <Typography variant="h1">{alert.data.name}</Typography>
-          <Typography color="text.secondary">
-            {alert.data.kind === 'screen'
-              ? `New matches for “${alert.data.preset_name}”`
-              : `${alert.data.ticker}: ${alert.data.condition_summary ?? ''}`}
-          </Typography>
+          <Typography variant="h1">{alertLabel(alert.data)}</Typography>
           <Typography variant="body2" color="text.secondary">
             Last checked{' '}
             {alert.data.last_evaluated_at ? formatAge(alert.data.last_evaluated_at) : 'not yet'}

@@ -29,6 +29,7 @@ import {
   type AlertSummary,
 } from '../api/useAlerts';
 import { AlertDialog } from '../components/AlertDialog';
+import { alertLabel } from '../components/alertLabel';
 
 const STATUS: Record<
   AlertSummary['status'],
@@ -92,8 +93,8 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
           onClose={() => setCreated(null)}
         >
           {created.condition_met_now
-            ? `“${created.name}” is already true right now. It will fire the next time it becomes true, not for the current state.`
-            : `“${created.name}” is set.`}
+            ? `“${alertLabel(created)}” is already true right now. It will fire the next time it becomes true, not for the current state.`
+            : `“${alertLabel(created)}” is set.`}
         </Alert>
       )}
 
@@ -118,7 +119,6 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
             <TableHead>
               <TableRow>
                 <TableCell>Alert</TableCell>
-                <TableCell>Watching</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Last checked</TableCell>
                 <TableCell>Last fired</TableCell>
@@ -133,7 +133,12 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
                   <TableRow key={alert.id} hover>
                     <TableCell>
                       <Stack>
-                        <RouterLinkText to={`/alerts/${alert.id}`}>{alert.name}</RouterLinkText>
+                        <RouterLinkText to={`/alerts/${alert.id}`}>
+                          {(alert.kind === 'screen' ? alert.preset_name : alert.ticker) ?? '—'}
+                        </RouterLinkText>
+                        {alert.condition_summary && (
+                          <Typography variant="body2">{alert.condition_summary}</Typography>
+                        )}
                         <Typography variant="caption" color="text.secondary">
                           {KIND[alert.kind]}
                           {alert.trigger_mode === 'rearm' && alert.kind !== 'screen'
@@ -141,16 +146,6 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
                             : ''}
                         </Typography>
                       </Stack>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {alert.kind === 'screen' ? alert.preset_name : alert.ticker}
-                      </Typography>
-                      {alert.condition_summary && (
-                        <Typography variant="caption" color="text.secondary">
-                          {alert.condition_summary}
-                        </Typography>
-                      )}
                     </TableCell>
                     <TableCell>
                       <Tooltip title={alert.disabled_reason ?? ''}>
@@ -172,7 +167,7 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
                         <Tooltip title={alert.status === 'triggered' ? 'Re-arm' : 'Resume'}>
                           <IconButton
                             size="small"
-                            aria-label={`Resume ${alert.name}`}
+                            aria-label={`Resume ${alertLabel(alert)}`}
                             onClick={() =>
                               update.mutate({ id: alert.id, patch: { status: 'active' } })
                             }
@@ -184,7 +179,7 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
                         <Tooltip title="Pause">
                           <IconButton
                             size="small"
-                            aria-label={`Pause ${alert.name}`}
+                            aria-label={`Pause ${alertLabel(alert)}`}
                             disabled={paused}
                             onClick={() =>
                               update.mutate({ id: alert.id, patch: { status: 'paused' } })
@@ -197,7 +192,7 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
                       <Tooltip title="Edit">
                         <IconButton
                           size="small"
-                          aria-label={`Edit ${alert.name}`}
+                          aria-label={`Edit ${alertLabel(alert)}`}
                           onClick={() => setEditingId(alert.id)}
                         >
                           <EditIcon fontSize="small" />
@@ -206,7 +201,7 @@ export function AlertsPage({ creating = false }: { creating?: boolean }) {
                       <Tooltip title="Delete">
                         <IconButton
                           size="small"
-                          aria-label={`Delete ${alert.name}`}
+                          aria-label={`Delete ${alertLabel(alert)}`}
                           onClick={() => remove.mutate(alert.id)}
                         >
                           <DeleteIcon fontSize="small" />

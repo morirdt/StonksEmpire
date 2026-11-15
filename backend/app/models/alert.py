@@ -79,8 +79,6 @@ class Alert(Base, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    #: Not unique: two alerts named "AAPL" are fine.
-    name: Mapped[str] = mapped_column(String(80), nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     #: Symbols are deactivated, never deleted, so this never dangles.
     symbol_id: Mapped[uuid.UUID | None] = mapped_column(

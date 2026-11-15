@@ -94,7 +94,7 @@ CROSS_USER_RESOURCES: list[ResourceCase] = [
     # one sits under /me/, but naming a notification by id is still the
     # forge-an-id shape, so it belongs here and not in CALLER_SCOPED_RESOURCES.
     ResourceCase("GET", "/api/v1/alerts/{alert_id}"),
-    ResourceCase("PATCH", "/api/v1/alerts/{alert_id}", body={"name": "hijacked"}),
+    ResourceCase("PATCH", "/api/v1/alerts/{alert_id}", body={"cooldown_minutes": 30}),
     ResourceCase("DELETE", "/api/v1/alerts/{alert_id}"),
     ResourceCase("GET", "/api/v1/alerts/{alert_id}/triggers"),
     ResourceCase("POST", "/api/v1/me/notifications/{notification_id}/read"),
@@ -228,7 +228,6 @@ async def other_users_rows(
     alert = await client.post(
         "/api/v1/alerts",
         json={
-            "name": "Private alert",
             "kind": "intraday",
             "ticker": seeded_symbols[0].ticker,
             "condition": {"kind": "numeric", "field": "price", "op": "gt", "value": "1"},
@@ -242,7 +241,6 @@ async def other_users_rows(
     doomed = await client.post(
         "/api/v1/alerts",
         json={
-            "name": "Doomed alert",
             "kind": "intraday",
             "ticker": "SPY",
             "condition": {"kind": "numeric", "field": "price", "op": "gt", "value": "1"},
@@ -362,7 +360,7 @@ async def test_an_alert_cannot_watch_another_users_preset(
     """The preset is named in the body, not the path, so the harness above cannot see it."""
     response = await auth_client.post(
         "/api/v1/alerts",
-        json={"name": "Snooping", "kind": "screen", "preset_id": other_users_rows["preset_id"]},
+        json={"kind": "screen", "preset_id": other_users_rows["preset_id"]},
     )
 
     assert response.status_code == 404

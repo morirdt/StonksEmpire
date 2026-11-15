@@ -451,7 +451,7 @@ All under `/api/v1`, all requiring `CurrentUser` except where noted.
 | GET | `/alerts` | The caller's alerts, with `last_evaluated_at` and `last_triggered_at` |
 | POST | `/alerts` | Create. `422` past the active cap or on an invalid tree. Response includes `condition_met_now` |
 | GET | `/alerts/{id}` | One alert |
-| PATCH | `/alerts/{id}` | Edit name, condition, mode, cooldown, or `status` between `active`/`paused`. Editing the condition resets `last_state` |
+| PATCH | `/alerts/{id}` | Edit condition, mode, cooldown, or `status` between `active`/`paused`. Editing the condition resets `last_state` |
 | DELETE | `/alerts/{id}` | `204` |
 | GET | `/alerts/{id}/triggers` | Firing history with snapshots, newest first, cursor-paginated |
 | GET | `/me/notifications` | Cursor-paginated; `?unread=true` |

@@ -38,7 +38,12 @@ from app.models.screener import ScreenerPreset
 from app.models.symbol import Symbol
 from app.repositories.alert_repository import AlertRepository, Evaluation
 from app.schemas.screener import FilterNode, parse_stored_filters
-from app.services.alerts.evaluation import decide, describe_condition, new_entrants
+from app.services.alerts.evaluation import (
+    decide,
+    describe_condition,
+    new_entrants,
+    symbol_label,
+)
 from app.services.screener.fields import FIELDS, INTRADAY_FIELDS, KNOWN_FIELDS
 
 __all__ = ["AlertEvaluator", "FiringReport", "publish_hints"]
@@ -134,7 +139,12 @@ class AlertEvaluator:
 
         async def disable(alert: Alert, report: FiringReport) -> None:
             ticker = await self._ticker(alert.symbol_id)
-            self._disable(alert, report, f"{ticker} is no longer listed, so this alert stopped.")
+            self._disable(
+                alert,
+                report,
+                symbol_label(ticker, alert.condition),
+                f"{ticker} is no longer listed, so this alert stopped.",
+            )
 
         return await self._each(ids, disable, require_active=False)
 
@@ -172,7 +182,12 @@ class AlertEvaluator:
         symbol = await self._session.get(Symbol, alert.symbol_id)
         if symbol is None or not symbol.is_active:
             ticker = symbol.ticker if symbol is not None else "This symbol"
-            self._disable(alert, report, f"{ticker} is no longer listed, so this alert stopped.")
+            self._disable(
+                alert,
+                report,
+                symbol_label(ticker, alert.condition),
+                f"{ticker} is no longer listed, so this alert stopped.",
+            )
             return
 
         intraday = alert.kind == AlertKind.INTRADAY.value
@@ -184,7 +199,7 @@ class AlertEvaluator:
                 what="alert",
             )
         except ValidationError as exc:
-            self._disable(alert, report, exc.detail)
+            self._disable(alert, report, symbol_label(symbol.ticker, alert.condition), exc.detail)
             return
 
         state, values = await evaluate(tree, symbol.id)
@@ -213,8 +228,8 @@ class AlertEvaluator:
             alert,
             report,
             snapshot={"ticker": symbol.ticker, "condition": summary, "values": values},
-            title=f"{symbol.ticker}: {alert.name}",
-            body=f"{summary}. {readings}" if readings else summary,
+            title=symbol_label(symbol.ticker, alert.condition)[:200],
+            body=readings or summary,
             payload={"ticker": symbol.ticker},
             as_of_date=None if intraday else as_of,
             as_of_time=self._now if intraday else None,
@@ -228,7 +243,7 @@ class AlertEvaluator:
         try:
             tree = parse_stored_filters(preset.filters)
         except ValidationError as exc:
-            self._disable(alert, report, exc.detail)
+            self._disable(alert, report, f"new matches for {preset.name}", exc.detail)
             return
 
         matches = await self._alerts.screen_matches(tree, as_of)
@@ -254,7 +269,11 @@ class AlertEvaluator:
                 "as_of": as_of.isoformat(),
             },
             title=f"{preset.name}: {len(tickers)} new {noun}",
-            body=f"{named} and {more} more now match." if more > 0 else f"{named} now match.",
+            body=(
+                f"{named} and {more} more now match."
+                if more > 0
+                else f"{named} now {'matches' if len(tickers) == 1 else 'match'}."
+            ),
             payload={"preset_id": str(preset.id), "tickers": tickers},
             as_of_date=as_of,
         )
@@ -265,7 +284,7 @@ class AlertEvaluator:
         symbol = await self._session.get(Symbol, symbol_id) if symbol_id else None
         return symbol.ticker if symbol is not None else "This symbol"
 
-    def _disable(self, alert: Alert, report: FiringReport, reason: str) -> None:
+    def _disable(self, alert: Alert, report: FiringReport, label: str, reason: str) -> None:
         alert.status = AlertStatus.DISABLED.value
         alert.disabled_reason = reason[:200]
         alert.last_evaluated_at = self._now
@@ -273,7 +292,7 @@ class AlertEvaluator:
             id=uuid.uuid7(),
             user_id=alert.user_id,
             kind=NotificationKind.ALERT_DISABLED.value,
-            title=f"Alert disabled: {alert.name}"[:200],
+            title=f"Alert disabled: {label}"[:200],
             body=reason,
             payload={"alert_id": str(alert.id)},
             alert_id=alert.id,

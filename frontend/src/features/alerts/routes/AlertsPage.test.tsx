@@ -21,7 +21,6 @@ const smaField = { ...priceField, key: 'sma_200', label: 'SMA 200' };
 
 const existing = {
   id: 'a1',
-  name: 'AAPL breakout',
   kind: 'intraday',
   ticker: 'AAPL',
   preset_id: null,
@@ -97,7 +96,7 @@ describe('AlertsPage', () => {
   it('says an alert has not been checked yet rather than leaving it blank', async () => {
     renderAt('/alerts');
 
-    const row = (await screen.findByText('AAPL breakout')).closest('tr')!;
+    const row = (await screen.findByRole('link', { name: 'AAPL' })).closest('tr')!;
     expect(within(row).getByText('Not yet')).toBeInTheDocument();
     expect(within(row).getByText('Price > 200')).toBeInTheDocument();
   });
@@ -108,13 +107,11 @@ describe('AlertsPage', () => {
 
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Symbol AAPL')).toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText('Name'), 'Above the 200-day');
     await user.click(await within(dialog).findByRole('button', { name: /add field comparison/i }));
     await user.click(within(dialog).getByRole('button', { name: 'Create alert' }));
 
     expect(posted).toEqual([
       {
-        name: 'Above the 200-day',
         kind: 'intraday',
         ticker: 'AAPL',
         condition: {
@@ -126,5 +123,10 @@ describe('AlertsPage', () => {
       },
     ]);
     expect(await screen.findByText(/is already true right now/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('table', { name: 'Alerts' })).getByRole('button', {
+        name: 'Edit AAPL: Price > 200',
+      }),
+    ).toBeInTheDocument();
   });
 });

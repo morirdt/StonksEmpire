@@ -119,7 +119,6 @@ class AlertService:
         await self._require_capacity(user_id)
         alert = Alert(
             user_id=user_id,
-            name=request.name.strip(),
             kind=request.kind.value,
             trigger_mode=(
                 request.trigger_mode
@@ -155,8 +154,6 @@ class AlertService:
         alert = await self._owned(user_id, alert_id)
         kind = AlertKind(alert.kind)
 
-        if patch.name is not None:
-            alert.name = patch.name.strip()
         if patch.cooldown_minutes is not None:
             alert.cooldown_minutes = patch.cooldown_minutes
         if patch.trigger_mode is not None:
@@ -308,7 +305,6 @@ class AlertService:
 def _summary(alert: Alert, ticker: str | None, preset_name: str | None) -> AlertSummary:
     return AlertSummary(
         id=alert.id,
-        name=alert.name,
         kind=AlertKind(alert.kind),
         ticker=ticker,
         preset_id=alert.preset_id,

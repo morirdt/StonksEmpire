@@ -79,7 +79,6 @@ export function AlertDialog({
   );
   const nested = Boolean(editing?.condition) && parsed === null;
 
-  const [name, setName] = useState(editing?.name ?? '');
   const [kind, setKind] = useState<AlertKind>(
     editing?.kind ?? (initialPresetId ? 'screen' : 'intraday'),
   );
@@ -105,7 +104,6 @@ export function AlertDialog({
   const effectiveMode: TriggerMode = kind === 'screen' ? 'rearm' : triggerMode;
 
   const ready =
-    name.trim().length > 0 &&
     (kind === 'screen' ? presetId !== '' : ticker !== null && (tree !== null || nested)) &&
     (effectiveMode === 'once' || kind === 'screen' || cooldownValid);
 
@@ -125,7 +123,6 @@ export function AlertDialog({
         {
           id: editing.id,
           patch: {
-            name: name.trim(),
             ...(kind !== 'screen' ? { trigger_mode: effectiveMode } : {}),
             ...(tree && !nested ? { condition: tree } : {}),
             ...cooldownPart,
@@ -138,9 +135,8 @@ export function AlertDialog({
 
     create.mutate(
       kind === 'screen'
-        ? { name: name.trim(), kind, preset_id: presetId }
+        ? { kind, preset_id: presetId }
         : {
-            name: name.trim(),
             kind,
             ticker: ticker!,
             condition: tree!,
@@ -161,14 +157,6 @@ export function AlertDialog({
       <DialogTitle>{editing ? 'Edit alert' : 'New alert'}</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ pt: 1 }}>
-          <TextField
-            label="Name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            slotProps={{ htmlInput: { maxLength: 80 } }}
-            autoFocus
-          />
-
           <Stack spacing={1}>
             <ToggleButtonGroup
               exclusive

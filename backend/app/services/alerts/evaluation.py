@@ -34,7 +34,7 @@ from typing import Any
 from app.core.enums import TriggerMode
 from app.services.screener.fields import KNOWN_FIELDS
 
-__all__ = ["Outcome", "decide", "describe_condition", "new_entrants"]
+__all__ = ["Outcome", "decide", "describe_condition", "new_entrants", "symbol_label"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +91,12 @@ def new_entrants(
 # ----------------------------------------------------------- condition summary
 
 _OPERATORS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<=", "eq": "=", "neq": "!="}
+
+
+def symbol_label(ticker: str, condition: Mapping[str, Any] | None) -> str:
+    """How a symbol alert is named in notifications: alerts have no name of their own."""
+    summary = describe_condition(condition)
+    return f"{ticker}: {summary}" if summary else ticker
 
 
 def describe_condition(raw: Mapping[str, Any] | None) -> str | None:

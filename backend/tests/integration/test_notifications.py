@@ -30,11 +30,10 @@ async def make_notifications(
     clock: FrozenClock,
     count: int = 3,
 ) -> list[dict[str, Any]]:
-    for i in range(count):
+    for _ in range(count):
         created = await client.post(
             "/api/v1/alerts",
             json={
-                "name": f"SPY {i}",
                 "kind": "intraday",
                 "ticker": "SPY",
                 "condition": {"kind": "numeric", "field": "price", "op": "gt", "value": "1"},

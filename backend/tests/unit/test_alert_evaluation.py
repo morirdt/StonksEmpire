@@ -155,7 +155,7 @@ def test_a_garbled_condition_does_not_raise() -> None:
 
 def _alert(kind: str, condition: dict) -> AlertCreateRequest:
     return AlertCreateRequest.model_validate(
-        {"name": "x", "kind": kind, "ticker": "AAPL", "condition": condition}
+        {"kind": kind, "ticker": "AAPL", "condition": condition}
     )
 
 
@@ -189,7 +189,6 @@ def test_a_screen_alert_takes_no_condition() -> None:
     with pytest.raises(ValidationError, match="follows its preset"):
         AlertCreateRequest.model_validate(
             {
-                "name": "x",
                 "kind": "screen",
                 "preset_id": str(uuid.uuid7()),
                 "condition": {"kind": "numeric", "field": "close", "op": "gt", "value": "1"},
@@ -200,7 +199,7 @@ def test_a_screen_alert_takes_no_condition() -> None:
 def test_a_screen_alert_cannot_be_once() -> None:
     with pytest.raises(ValidationError, match="always 'rearm'"):
         AlertCreateRequest.model_validate(
-            {"name": "x", "kind": "screen", "preset_id": str(uuid.uuid7()), "trigger_mode": "once"}
+            {"kind": "screen", "preset_id": str(uuid.uuid7()), "trigger_mode": "once"}
         )
 
 

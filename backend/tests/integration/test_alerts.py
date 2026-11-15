@@ -41,7 +41,7 @@ def price_above(threshold: Decimal | str) -> dict[str, Any]:
 
 
 async def create_alert(client: AsyncClient, **body: Any) -> dict[str, Any]:
-    payload = {"name": "Test alert", "kind": "intraday", "ticker": "AAPL", **body}
+    payload = {"kind": "intraday", "ticker": "AAPL", **body}
     response = await client.post("/api/v1/alerts", json=payload)
     assert response.status_code == 201, response.text
     return response.json()
@@ -111,7 +111,8 @@ async def test_an_intraday_alert_fires_on_the_crossing_and_only_then(
 
     notes = (await auth_client.get("/api/v1/me/notifications")).json()["items"]
     assert [n["kind"] for n in notes] == ["alert_triggered"]
-    assert notes[0]["title"] == "AAPL: Test alert"
+    assert notes[0]["title"] == f"AAPL: Price > {threshold}", "named by what it watches"
+    assert notes[0]["body"].startswith("Price "), "the body carries the readings"
     assert notes[0]["payload"]["alert_id"] == alert["id"]
 
     hints = [e for e in published.events if e["type"] == "notification_created"]
@@ -147,7 +148,7 @@ async def test_a_new_alert_already_met_says_so_and_does_not_fire(
     clock: FrozenClock,
     seeded_symbols: list[Symbol],
 ) -> None:
-    await create_alert(auth_client, condition=price_above("1"), name="warm-up")
+    await create_alert(auth_client, condition=price_above("1"))
     await poll(session_factory, clock, (11, 0))  # now AAPL has a quote
 
     alert = await create_alert(auth_client, condition=price_above("1"))
@@ -188,10 +189,8 @@ async def test_one_broken_alert_does_not_stop_the_run(
     clock: FrozenClock,
     seeded_symbols: list[Symbol],
 ) -> None:
-    broken = await create_alert(auth_client, condition=price_above("1"), name="broken")
-    healthy = await create_alert(
-        auth_client, condition=price_above("1"), name="healthy", trigger_mode="rearm"
-    )
+    broken = await create_alert(auth_client, condition=price_above("1"))
+    healthy = await create_alert(auth_client, condition=price_above("1"), trigger_mode="rearm")
     # A field that no longer exists, as a later phase removing a column would leave it.
     await _force(
         db_session,
@@ -204,15 +203,15 @@ async def test_one_broken_alert_does_not_stop_the_run(
 
     assert (result.alerts.disabled, result.alerts.fired) == (1, 1)
     broken_now = (await auth_client.get("/api/v1/alerts")).json()
-    by_name = {a["name"]: a for a in broken_now}
-    assert by_name["broken"]["status"] == "disabled"
-    assert "removed_field" in by_name["broken"]["disabled_reason"]
-    assert by_name["healthy"]["last_triggered_at"] is not None
+    by_id = {a["id"]: a for a in broken_now}
+    assert by_id[broken["id"]]["status"] == "disabled"
+    assert "removed_field" in by_id[broken["id"]]["disabled_reason"]
+    assert by_id[healthy["id"]]["last_triggered_at"] is not None
 
-    kinds = sorted(
-        n["kind"] for n in (await auth_client.get("/api/v1/me/notifications")).json()["items"]
-    )
-    assert kinds == ["alert_disabled", "alert_triggered"]
+    notes = (await auth_client.get("/api/v1/me/notifications")).json()["items"]
+    assert sorted(n["kind"] for n in notes) == ["alert_disabled", "alert_triggered"]
+    (disabled,) = [n for n in notes if n["kind"] == "alert_disabled"]
+    assert disabled["title"] == "Alert disabled: AAPL: removed_field > 1"
 
 
 # ----------------------------------------------------------------- end of day
@@ -293,7 +292,7 @@ async def test_a_screen_alert_fires_on_new_entrants_and_on_re_entry(
     alert = (
         await auth_client.post(
             "/api/v1/alerts",
-            json={"name": "Over 100", "kind": "screen", "preset_id": preset.json()["id"]},
+            json={"kind": "screen", "preset_id": preset.json()["id"]},
         )
     ).json()
     assert alert["trigger_mode"] == "rearm"
@@ -317,7 +316,7 @@ async def test_a_screen_alert_fires_on_new_entrants_and_on_re_entry(
     assert [t["snapshot"]["entrants"] for t in triggers] == [["MSFT"], ["MSFT"]]
     note = (await auth_client.get("/api/v1/me/notifications")).json()["items"][0]
     assert note["title"] == "Over 100: 1 new match"
-    assert note["body"] == "MSFT now match."
+    assert note["body"] == "MSFT now matches."
 
 
 async def test_deleting_a_preset_deletes_its_screen_alerts(
@@ -409,7 +408,7 @@ async def test_an_unknown_ticker_is_a_422(
 ) -> None:
     response = await auth_client.post(
         "/api/v1/alerts",
-        json={"name": "x", "kind": "intraday", "ticker": "NOPE", "condition": price_above("1")},
+        json={"kind": "intraday", "ticker": "NOPE", "condition": price_above("1")},
     )
     assert response.status_code == 422
 
@@ -425,7 +424,7 @@ async def test_the_active_cap_at_the_limit_and_one_past(
 
     past = await auth_client.post(
         "/api/v1/alerts",
-        json={"name": "x", "kind": "intraday", "ticker": "AAPL", "condition": price_above("1")},
+        json={"kind": "intraday", "ticker": "AAPL", "condition": price_above("1")},
     )
     assert past.status_code == 422
     assert "2 active alerts" in past.json()["detail"]
@@ -491,7 +490,6 @@ async def test_the_database_rejects_a_half_formed_alert(
     db_session.add(
         Alert(
             user_id=user.id,
-            name="bad",
             kind="screen",
             symbol_id=seeded_symbols[0].id,
             trigger_mode="rearm",
@@ -515,7 +513,7 @@ async def test_a_stale_quote_does_not_answer_condition_met_now(
     Found on the live stack: a cached quote above the threshold made a new alert
     report `true` while the real price sat below it.
     """
-    await create_alert(auth_client, condition=price_above("1"), name="warm-up")
+    await create_alert(auth_client, condition=price_above("1"))
     await poll(session_factory, clock, (11, 0))
     await db_session.execute(
         update(LatestQuote).values(fetched_at=datetime(2026, 1, 1, tzinfo=UTC))

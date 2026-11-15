@@ -48,7 +48,6 @@ def check_condition(tree: Any, kind: AlertKind) -> Any:
     return require_registry(tree, registry_for(kind), catalogue=ALERT_FIELDS_CATALOGUE)
 
 
-Name = Field(min_length=1, max_length=80)
 Cooldown = Field(default=None, ge=5, le=1440)
 
 
@@ -61,7 +60,6 @@ class AlertCreateRequest(BaseModel):
     always ``rearm``: they run once a day and fire on new entrants.
     """
 
-    name: str = Name
     kind: AlertKind
     ticker: str | None = Field(default=None, min_length=1, max_length=16)
     preset_id: uuid.UUID | None = None
@@ -104,7 +102,6 @@ class AlertUpdateRequest(BaseModel):
     alert re-arms it, which is the explicit action ``once`` requires.
     """
 
-    name: str | None = Field(default=None, min_length=1, max_length=80)
     condition: FilterNode | None = None
     trigger_mode: TriggerMode | None = None
     cooldown_minutes: int | None = Cooldown
@@ -124,7 +121,6 @@ class AlertSummary(BaseModel):
     """
 
     id: uuid.UUID
-    name: str
     kind: AlertKind
     ticker: str | None
     preset_id: uuid.UUID | None
