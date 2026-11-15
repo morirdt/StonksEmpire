@@ -123,10 +123,11 @@ describe('AlertsPage', () => {
       },
     ]);
     expect(await screen.findByText(/is already true right now/)).toBeInTheDocument();
+    // `find`, not `get`: until the dialog's exit transition ends, MUI marks the
+    // page behind it aria-hidden, so the table is not yet in the accessible tree.
+    const table = await screen.findByRole('table', { name: 'Alerts' });
     expect(
-      within(screen.getByRole('table', { name: 'Alerts' })).getByRole('button', {
-        name: 'Edit AAPL: Price > 200',
-      }),
+      within(table).getByRole('button', { name: 'Edit AAPL: Price > 200' }),
     ).toBeInTheDocument();
   });
 });
